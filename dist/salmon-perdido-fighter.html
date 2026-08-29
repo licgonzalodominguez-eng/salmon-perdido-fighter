@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="theme-color" content="#0a0d16" />
 <title>En Busca del Salmón Perdido — Arcade</title>
 <style>
   :root{
@@ -20,9 +24,37 @@
   .hint{width:min(96vw,960px);color:var(--muted);font-size:12px;line-height:1.6;text-align:center;letter-spacing:.03em}
   .hint b{color:var(--ink)}
   .tag{color:var(--muted);font-size:13px;letter-spacing:.14em;text-transform:uppercase}
-  .nokey{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;
-    padding:24px;background:rgba(6,9,16,.9);font-size:14px;color:var(--muted)}
-  @media (hover:none) and (pointer:coarse){ .nokey{display:flex} }
+
+  /* ---------- teléfono ---------- */
+  #touch{position:absolute;inset:0;display:none;pointer-events:none;z-index:5}
+  #touch button{
+    pointer-events:auto;position:absolute;width:58px;height:58px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.28);background:rgba(18,24,38,.42);
+    color:#eef2ff;font:700 19px ui-monospace,monospace;
+    touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);
+  }
+  #touch button:active{background:rgba(74,163,255,.55);border-color:#fff}
+  #touch .pad{position:absolute;left:12px;bottom:12px;width:190px;height:190px}
+  #touch .acts{position:absolute;right:12px;bottom:12px;width:190px;height:190px}
+  #touch [data-k=up]{left:66px;bottom:128px}
+  #touch [data-k=left]{left:4px;bottom:66px}
+  #touch [data-k=down]{left:66px;bottom:4px}
+  #touch [data-k=right]{left:128px;bottom:66px}
+  #touch [data-k=punch]{right:66px;bottom:128px}
+  #touch [data-k=kick]{right:4px;bottom:66px}
+  #touch [data-k=block]{right:128px;bottom:66px}
+  #touch [data-k=special]{right:66px;bottom:4px;border-color:#4ad6ff;color:#4ad6ff}
+  .rotate{position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;
+    text-align:center;padding:24px;background:#060910;color:var(--muted);font-size:16px}
+
+  body.touch{padding:0;gap:0;position:fixed;inset:0;overflow:hidden;overscroll-behavior:none}
+  body.touch .tag, body.touch .hint{display:none}
+  body.touch .wrap{width:100vw;height:100vh;height:100dvh;display:flex;align-items:center;justify-content:center}
+  body.touch .frame{border-radius:0;aspect-ratio:auto;
+    width:min(100vw, calc(100dvh * 16 / 9));height:min(100dvh, calc(100vw * 9 / 16))}
+  body.touch #touch{display:block}
+  @media (orientation:portrait){ body.touch .rotate{display:flex} }
 </style>
 </head>
 <body>
@@ -30,7 +62,21 @@
   <div class="wrap">
     <div class="frame">
       <canvas id="game" width="960" height="540"></canvas>
-      <div class="nokey">Este juego necesita teclado. Ábrelo en un ordenador.</div>
+      <div id="touch" aria-hidden="true">
+        <div class="pad">
+          <button data-k="up" aria-label="saltar">▲</button>
+          <button data-k="left" aria-label="izquierda">◀</button>
+          <button data-k="down" aria-label="agacharse">▼</button>
+          <button data-k="right" aria-label="derecha">▶</button>
+        </div>
+        <div class="acts">
+          <button data-k="punch" aria-label="golpe">P</button>
+          <button data-k="kick" aria-label="patada">K</button>
+          <button data-k="block" aria-label="bloquear">B</button>
+          <button data-k="special" aria-label="especial">★</button>
+        </div>
+      </div>
+      <div class="rotate">Girá el teléfono para jugar ↺</div>
     </div>
   </div>
   <div class="hint">
@@ -241,6 +287,33 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyM" && !e.repeat) { muted = !muted; music.setDuck(false); }
 }, { passive: false });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+/* ---- controles táctiles (teléfono) ---- */
+const IS_TOUCH = window.matchMedia && (window.matchMedia("(pointer: coarse)").matches) || ("ontouchstart" in window);
+if (IS_TOUCH) {
+  document.body.classList.add("touch");
+  const held = {};
+  const setBtn = (act, on) => {
+    const code = MAP1[act];
+    if (on) { keys[code] = true; if (!held[act]) pressed[code] = true; held[act] = true; }
+    else { keys[code] = false; held[act] = false; }
+  };
+  for (const b of document.querySelectorAll("#touch button")) {
+    const act = b.dataset.k;
+    b.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      try { b.setPointerCapture(e.pointerId); } catch (er) {}
+      setBtn(act, true);
+    }, { passive: false });
+    const rel = (e) => { e.preventDefault(); setBtn(act, false); };
+    b.addEventListener("pointerup", rel);
+    b.addEventListener("pointercancel", rel);
+  }
+  const frame = document.querySelector(".frame");
+  frame.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+  addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
 function readInput(map) {
   return {
     left: !!keys[map.left], right: !!keys[map.right], up: !!keys[map.up], down: !!keys[map.down],
@@ -986,15 +1059,20 @@ function resolveKO(winner) {
 }
 
 /* ---- title ---- */
-const TITLE_OPTS = 3;   // 1 jugador · 2 jugadores · controles
+// en teléfono se oculta "2 JUGADORES" (no hay controles para el 2º)
+const MENU = IS_TOUCH
+  ? [{ label: "1 JUGADOR  (vs CPU)", act: 1 }, { label: "CONTROLES", act: "controls" }]
+  : [{ label: "1 JUGADOR  (vs CPU)", act: 1 }, { label: "2 JUGADORES", act: 2 }, { label: "CONTROLES", act: "controls" }];
 function updateTitle() {
   music.stop();
-  if (pressed["KeyW"] || pressed["ArrowUp"]) { game.menuSel = (game.menuSel + TITLE_OPTS - 1) % TITLE_OPTS; sfx.ui(); }
-  if (pressed["KeyS"] || pressed["ArrowDown"]) { game.menuSel = (game.menuSel + 1) % TITLE_OPTS; sfx.ui(); }
+  const n = MENU.length;
+  if (pressed["KeyW"] || pressed["ArrowUp"] || pressed[MAP1.up]) { game.menuSel = (game.menuSel + n - 1) % n; sfx.ui(); }
+  if (pressed["KeyS"] || pressed["ArrowDown"] || pressed[MAP1.down]) { game.menuSel = (game.menuSel + 1) % n; sfx.ui(); }
   if (anyConfirm()) {
     sfx.round();
-    if (game.menuSel === 2) { game.scene = "controls"; game.ctrlCursor = 0; game.ctrlCapturing = false; return; }
-    game.mode = game.menuSel === 0 ? 1 : 2;
+    const act = MENU[game.menuSel].act;
+    if (act === "controls") { game.scene = "controls"; game.ctrlCursor = 0; game.ctrlCapturing = false; return; }
+    game.mode = act;
     resetSelect();
     game.scene = "select";
   }
@@ -1947,15 +2025,14 @@ function drawTitle() {
   ctx.fillStyle = "#8b95b8"; ctx.font = "16px monospace";
   ctx.fillText("— ARCADE / COMBATE —", W / 2, 232);
 
-  const opts = ["1 JUGADOR  (vs CPU)", "2 JUGADORES", "CONTROLES"];
   ctx.font = "bold 22px monospace";
-  for (let i = 0; i < opts.length; i++) {
+  for (let i = 0; i < MENU.length; i++) {
     const sel = game.menuSel === i;
     ctx.fillStyle = sel ? "#4aa3ff" : "#eef2ff";
-    ctx.fillText((sel ? "▶  " : "    ") + opts[i], W / 2, 312 + i * 38);
+    ctx.fillText((sel ? "▶  " : "    ") + MENU[i].label, W / 2, 312 + i * 38);
   }
   ctx.fillStyle = "#8b95b8"; ctx.font = "13px monospace";
-  ctx.fillText("W/S o ↑/↓ para elegir · ENTER para confirmar", W / 2, 448);
+  ctx.fillText(IS_TOUCH ? "usá ▲/▼ para elegir · P para confirmar" : "W/S o ↑/↓ para elegir · ENTER para confirmar", W / 2, 448);
   ctx.fillText("9 luchadores · al mejor de 3 · especial único por personaje", W / 2, 470);
   ctx.textAlign = "left";
 }
