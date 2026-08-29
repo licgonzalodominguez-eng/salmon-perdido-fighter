@@ -96,6 +96,85 @@ const sfx = {
   },
 };
 
+/* ---- música de combate (procedural, estilo oscuro / Mortal Kombat) ---- */
+const music = {
+  on: false, master: null, drone: [], timer: null, step: 0, next: 0, bpm: 134,
+  start() {
+    if (this.on) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.resume) actx.resume();
+    } catch (e) { return; }
+    this.on = true; this.step = 0; this.next = actx.currentTime + 0.15;
+    this.master = actx.createGain();
+    this.master.gain.value = muted ? 0 : 0.10;
+    this.master.connect(actx.destination);
+    this.drone = [];
+    for (const d of [0.5, 0.5031, 0.749]) {           // pad grave detuneado
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = "sawtooth"; o.frequency.value = 55 * d;
+      g.gain.value = 0.02; o.connect(g); g.connect(this.master);
+      o.start(); this.drone.push(o);
+    }
+    this.timer = setInterval(() => this.sched(), 25);
+  },
+  stop() {
+    if (!this.on) return;
+    this.on = false;
+    clearInterval(this.timer); this.timer = null;
+    try {
+      const now = actx.currentTime;
+      this.master.gain.setTargetAtTime(0.0001, now, 0.06);
+      for (const o of this.drone) o.stop(now + 0.4);
+      const m = this.master;
+      setTimeout(() => { try { m.disconnect(); } catch (e) {} }, 500);
+    } catch (e) {}
+    this.drone = [];
+  },
+  setDuck(q) { try { if (this.master) this.master.gain.value = (muted || q) ? 0 : 0.10; } catch (e) {} },
+  note(freq, t, dur, type, vol, slideTo) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.03);
+  },
+  sched() {
+    if (!this.on || !actx) return;
+    const spb = 60 / this.bpm / 4;
+    while (this.next < actx.currentTime + 0.12) {
+      this.play(this.step, this.next);
+      this.next += spb;
+      this.step = (this.step + 1) % 32;
+    }
+  },
+  play(s, t) {
+    const R = 55;                                     // La menor, tono oscuro
+    const b = s % 16, bar2 = s >= 16;
+    if ([0, 3, 6, 8, 11, 14].includes(b)) this.note(95, t, 0.14, "sine", 0.6, 30);        // bombo
+    if (b === 7 || b === 15) this.note(200, t, 0.16, "triangle", 0.32, 62);               // tom tribal
+    if (b % 2 === 1) this.note(5000 + Math.random() * 500, t, 0.02, "square", 0.012);     // hat
+    if (b % 2 === 0) {                                                                    // bajo
+      const seq = [0, 0, 3, 0, 0, -2, 3, 5];
+      const st = seq[(b / 2) | 0];
+      const f = R * Math.pow(2, st / 12);
+      this.note(f, t, 0.13, "sawtooth", 0.14, f * 0.985);
+    }
+    const lseq = { 0: 12, 6: 15, 10: 19 };                                                // lead ominoso
+    if (b in lseq) {
+      const semi = lseq[b] + (bar2 ? -2 : 0);
+      this.note(R * Math.pow(2, semi / 12), t, b === 10 ? 0.24 : 0.14, "sawtooth", 0.05);
+    }
+    if (s === 28) {                                                                       // stab de tensión (tritono)
+      this.note(R * 2, t, 0.32, "sawtooth", 0.05);
+      this.note(R * 2 * Math.pow(2, 6 / 12), t, 0.32, "sawtooth", 0.04);
+    }
+  },
+};
+
 /* ============================================================ INPUT */
 const keys = {}, pressed = {};
 let captureCb = null;              // si está puesto, la próxima tecla se captura (remapeo)
@@ -158,7 +237,7 @@ addEventListener("keydown", (e) => {
   if (GAMEKEYS.has(e.code)) e.preventDefault();
   if (!e.repeat) pressed[e.code] = true;
   keys[e.code] = true;
-  if (e.code === "KeyM" && !e.repeat) { muted = !muted; }
+  if (e.code === "KeyM" && !e.repeat) { muted = !muted; music.setDuck(false); }
 }, { passive: false });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 function readInput(map) {
@@ -578,6 +657,7 @@ function beginRound() {
   game.scene = "fight";
   projectiles = []; particles = [];
   sfx.round();
+  music.start();
 }
 function endRound(winner) {
   game.roundState = "done";
@@ -757,6 +837,7 @@ function update(dt) {
     if (game.sceneT > 1.9) {
       if (game.wins[0] >= WINS_NEEDED || game.wins[1] >= WINS_NEEDED || game.round >= 5) {
         game.scene = "matchend"; game.sceneT = 0;
+        music.stop();
         const w = game.wins[0] === game.wins[1] ? 0 : (game.wins[0] > game.wins[1] ? 1 : 2);
         game.matchWinner = w;
       } else {
@@ -772,7 +853,7 @@ function update(dt) {
   }
 
   // ---------- FIGHT ----------
-  if (pressed["KeyP"]) game.paused = !game.paused;
+  if (pressed["KeyP"]) { game.paused = !game.paused; music.setDuck(game.paused); }
   if (game.paused) return;
   if (pressed["KeyR"] && game.roundState === "play") { beginRound(); return; }
 
@@ -889,6 +970,7 @@ function resolveKO(winner) {
   game.announce = winner === 0 ? "DOBLE K.O." : "K.O.";
   game.annTimer = 1.7;
   game.shake = 16;
+  music.stop();
   sfx.ko();
   const f1 = game.f1, f2 = game.f2;
   if (winner !== 1 && f1.hp <= 0) { f1.ko = true; f1.state = "ko"; f1.vy = -260; f1.vx = -f1.facing * 120; }
@@ -902,6 +984,7 @@ function resolveKO(winner) {
 /* ---- title ---- */
 const TITLE_OPTS = 3;   // 1 jugador · 2 jugadores · controles
 function updateTitle() {
+  music.stop();
   if (pressed["KeyW"] || pressed["ArrowUp"]) { game.menuSel = (game.menuSel + TITLE_OPTS - 1) % TITLE_OPTS; sfx.ui(); }
   if (pressed["KeyS"] || pressed["ArrowDown"]) { game.menuSel = (game.menuSel + 1) % TITLE_OPTS; sfx.ui(); }
   if (anyConfirm()) {
