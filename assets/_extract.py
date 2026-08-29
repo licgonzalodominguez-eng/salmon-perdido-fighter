@@ -9,16 +9,16 @@ SOURCE = os.path.join(SRC, "source")
 OUT = os.path.join(SRC, "sprites")
 os.makedirs(OUT, exist_ok=True)
 
-# id -> (archivo en source/, caja [x0,y0,x1,y1] en fracciones, tolerancia, sujeto_claro)
+# id -> (archivo en source/, caja [x0,y0,x1,y1], tolerancia, modo: ""|"light"|"soft")
 JOBS = {
-    "michiloco": ("White_cat_wearing_cape_standing_202608290101.jpeg", (0.05, 0.03, 0.97, 0.99), 26, True),
-    "lupita":    ("Cat_dressed_as_sorceress_princess_202608290101.jpeg",(0.09, 0.02, 0.94, 0.99), 30, False),
-    "kai":       ("Cat_warrior_wearing_tactical_armor_202608290101.jpeg",(0.24, 0.02, 0.83, 0.99), 30, False),
-    "atlas":     ("Pink_axolotl_wearing_stone_armor_202608290101.jpeg",(0.03, 0.03, 0.98, 0.99), 32, False),
-    "nocturna":  ("Cat_queen_standing_in_gown_202608290101.jpeg",     (0.12, 0.01, 0.95, 0.995), 32, False),
-    "bruce":     ("bruce_new.jpeg",                                   (0.360, 0.03, 0.592, 0.945), 64, False),
-    "yubari":    ("Cat_wearing_green_robe_standing_202608290101.jpeg", (0.245, 0.03, 0.725, 0.955), 46, True),
-    "ratin":     ("Gray_ninja_mouse_standing_2K_202608290101.jpeg",   (0.23, 0.01, 0.69, 0.995), 30, False),
+    "michiloco": ("White_cat_wearing_cape_standing_202608290101.jpeg", (0.05, 0.03, 0.97, 0.99), 26, "light"),
+    "lupita":    ("Cat_dressed_as_sorceress_princess_202608290101.jpeg",(0.09, 0.02, 0.94, 0.99), 30, ""),
+    "kai":       ("Cat_warrior_wearing_tactical_armor_202608290101.jpeg",(0.24, 0.02, 0.83, 0.99), 30, ""),
+    "atlas":     ("Pink_axolotl_wearing_stone_armor_202608290101.jpeg",(0.03, 0.03, 0.98, 0.99), 32, ""),
+    "nocturna":  ("Cat_queen_standing_in_gown_202608290101.jpeg",     (0.12, 0.01, 0.95, 0.995), 32, ""),
+    "bruce":     ("bruce_new.jpeg",                                   (0.360, 0.03, 0.592, 0.945), 64, ""),
+    "yubari":    ("Cat_wearing_green_robe_standing_202608290101.jpeg", (0.245, 0.025, 0.725, 0.955), 52, "soft"),
+    "ratin":     ("Gray_ninja_mouse_standing_2K_202608290101.jpeg",   (0.23, 0.01, 0.69, 0.995), 30, ""),
 }
 
 TARGET_H = 480
@@ -71,7 +71,8 @@ def erode(m, n):
     return e
 
 
-def process(cid, fname, box, tol, white=False):
+def process(cid, fname, box, tol, mode=""):
+    """mode: "" normal (contornos oscuros) · "light" line-art claro binario · "soft" pelaje claro difuso"""
     im = Image.open(os.path.join(SOURCE, fname)).convert("RGB")
     W, H = im.size
     x0, y0, x1, y1 = box
@@ -86,16 +87,39 @@ def process(cid, fname, box, tol, white=False):
     bg = np.median(border, axis=0)
     dist = np.sqrt(((arr - bg) ** 2).sum(axis=2))
     mn = arr.min(axis=2)
-    bg_like = dist < tol if white else ((dist < tol) | (mn > 232))
 
     seed = np.zeros((ch, cw), bool)
     seed[0, :] = seed[-1, :] = seed[:, 0] = seed[:, -1] = True
-    background = reconstruct(seed, bg_like)
-    fg = largest_components(~background, keep_frac=0.06 if white else 0.10)
-    fg = ~reconstruct(seed, ~fg)                 # rellena huecos internos
-    fg = erode(fg, 1 if white else 2)            # quita el halo del matte
 
-    a_img = Image.fromarray((fg.astype(np.uint8) * 255), "L").filter(ImageFilter.GaussianBlur(0.6))
+    if mode == "soft":
+        # pelaje claro difuso (barba 3D de Yubari): matte SUAVE.
+        # se inunda solo el fondo casi exacto; el borde se desvanece por
+        # distancia de color -> las mechas finas quedan semitransparentes.
+        background = reconstruct(seed, dist < 16)
+        soft = np.clip((dist - 12.0) / (tol - 12.0), 0, 1)
+        soft[background] = 0
+        keep = largest_components(soft > 0.4, keep_frac=0.05)
+        keep = ~reconstruct(seed, ~keep)
+        soft[~keep] = 0
+        soft[soft < 0.12] = 0                     # corta el velo tenue
+        soft = soft ** 0.8
+        alpha = (soft * 255).astype(np.uint8)
+    elif mode == "light":
+        # line-art de sujeto claro (Michiloco): binario, sin usar el brillo como fondo
+        background = reconstruct(seed, dist < tol)
+        fg = largest_components(~background, keep_frac=0.06)
+        fg = ~reconstruct(seed, ~fg)
+        fg = erode(fg, 1)
+        alpha = fg.astype(np.uint8) * 255
+    else:
+        bg_like = (dist < tol) | (mn > 232)
+        background = reconstruct(seed, bg_like)
+        fg = largest_components(~background, keep_frac=0.10)
+        fg = ~reconstruct(seed, ~fg)             # rellena huecos internos
+        fg = erode(fg, 2)                        # quita el halo del matte
+        alpha = fg.astype(np.uint8) * 255
+
+    a_img = Image.fromarray(alpha, "L").filter(ImageFilter.GaussianBlur(0.6))
     out = crop.convert("RGBA")
     out.putalpha(a_img)
     bb = out.getbbox()
@@ -114,6 +138,6 @@ def process(cid, fname, box, tol, white=False):
 if __name__ == "__main__":
     only = sys.argv[1:] if len(sys.argv) > 1 else list(JOBS)
     for cid in only:
-        f, box, tol, white = JOBS[cid]
-        process(cid, f, box, tol, white)
+        f, box, tol, mode = JOBS[cid]
+        process(cid, f, box, tol, mode)
     print("listo ->", OUT)
