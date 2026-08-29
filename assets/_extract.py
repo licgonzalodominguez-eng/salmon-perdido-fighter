@@ -1,40 +1,38 @@
-"""Extrae la figura de cuerpo entero de cada hoja de personaje y guarda PNG transparente."""
+"""Extrae cada personaje de su lámina/render individual y guarda PNG transparente en sprites/.
+Viper no tiene render nuevo: su sprite se mantiene tal cual (no está en JOBS)."""
 import numpy as np
 from PIL import Image, ImageFilter
 import os, sys
 
 SRC = os.path.dirname(os.path.abspath(__file__))
+SOURCE = os.path.join(SRC, "source")
 OUT = os.path.join(SRC, "sprites")
 os.makedirs(OUT, exist_ok=True)
 
-# id -> (archivo, caja de recorte en fracciones [x0,y0,x1,y1], tolerancia de fondo, sujeto_claro)
+# id -> (archivo en source/, caja [x0,y0,x1,y1] en fracciones, tolerancia, sujeto_claro)
 JOBS = {
-    "michiloco": ("Michiloco_Character_Reference.jpg",              (0.752, 0.132, 0.958, 0.535), 20, True),
-    "lupita":    ("sorceress_princess_lupita_reference_sheet_5.jpg",(0.072, 0.142, 0.268, 0.468), 20, True),
-    "bruce":     ("bruce_cat_turnaround_sheet.jpg",                 (0.058, 0.185, 0.225, 0.560), 36, False),
-    "kai":       ("kai_character_design_sheet.jpg",                 (0.705, 0.545, 0.975, 0.950), 40, False),
-    "atlas":     ("atlas_character_sheet.jpg",                      (0.045, 0.115, 0.345, 0.575), 34, False),
-    "nocturna":  ("nocturna_shadow_queen_sheet.jpg",               (0.105, 0.075, 0.315, 0.580), 34, False),
-    "viper":     ("viper_character_sheet.jpg",                      (0.118, 0.050, 0.285, 0.535), 36, False),
-    "yubari":    ("master_yubari_buddhist_reference_sheet.jpg",     (0.095, 0.115, 0.315, 0.625), 34, False),
-    "ratin":     ("ratin_ninja_reference_sheet_1.jpg",             (0.055, 0.055, 0.245, 0.625), 36, False),
+    "michiloco": ("White_cat_wearing_cape_standing_202608290101.jpeg", (0.05, 0.03, 0.97, 0.99), 26, True),
+    "lupita":    ("Cat_dressed_as_sorceress_princess_202608290101.jpeg",(0.09, 0.02, 0.94, 0.99), 30, False),
+    "kai":       ("Cat_warrior_wearing_tactical_armor_202608290101.jpeg",(0.24, 0.02, 0.83, 0.99), 30, False),
+    "atlas":     ("Pink_axolotl_wearing_stone_armor_202608290101.jpeg",(0.03, 0.03, 0.98, 0.99), 32, False),
+    "nocturna":  ("Cat_queen_standing_in_gown_202608290101.jpeg",     (0.12, 0.01, 0.95, 0.995), 32, False),
+    "bruce":     ("bruce_new.jpeg",                                   (0.360, 0.03, 0.592, 0.945), 64, False),
+    "yubari":    ("Cat_wearing_green_robe_standing_202608290101.jpeg", (0.245, 0.03, 0.725, 0.955), 46, True),
+    "ratin":     ("Gray_ninja_mouse_standing_2K_202608290101.jpeg",   (0.23, 0.01, 0.69, 0.995), 30, False),
 }
 
-TARGET_H = 460
+TARGET_H = 480
 PAD = 8
 
 
-def dilate(mask):
-    out = mask.copy()
-    out[1:, :] |= mask[:-1, :]
-    out[:-1, :] |= mask[1:, :]
-    out[:, 1:] |= mask[:, :-1]
-    out[:, :-1] |= mask[:, 1:]
-    return out
+def dilate(m):
+    o = m.copy()
+    o[1:, :] |= m[:-1, :]; o[:-1, :] |= m[1:, :]
+    o[:, 1:] |= m[:, :-1]; o[:, :-1] |= m[:, 1:]
+    return o
 
 
-def reconstruct(seed, allowed, max_iter=4000):
-    """Reconstrucción morfológica: expande seed dentro de allowed hasta estabilizar."""
+def reconstruct(seed, allowed, max_iter=6000):
     cur = seed & allowed
     for _ in range(max_iter):
         nxt = dilate(cur) & allowed
@@ -44,93 +42,73 @@ def reconstruct(seed, allowed, max_iter=4000):
     return cur
 
 
-def largest_components(opaque, keep_frac=0.12):
-    """Devuelve máscara con el componente opaco mayor + los que superen keep_frac de su área."""
-    remaining = opaque.copy()
+def largest_components(opaque, keep_frac=0.10):
+    rem = opaque.copy()
     comps = []
-    h, w = opaque.shape
-    while remaining.any():
-        ys, xs = np.nonzero(remaining)
-        seed = np.zeros_like(remaining)
-        seed[ys[0], xs[0]] = True
-        comp = reconstruct(seed, remaining)
-        comps.append(comp)
-        remaining &= ~comp
-        if len(comps) > 40:
-            break
-    comps.sort(key=lambda c: int(c.sum()), reverse=True)
+    while rem.any() and len(comps) < 60:
+        ys, xs = np.nonzero(rem)
+        s = np.zeros_like(rem); s[ys[0], xs[0]] = True
+        c = reconstruct(s, rem)
+        comps.append(c); rem &= ~c
     if not comps:
         return opaque
-    biggest = int(comps[0].sum())
+    comps.sort(key=lambda c: int(c.sum()), reverse=True)
+    big = int(comps[0].sum())
     out = np.zeros_like(opaque)
     for c in comps:
-        if int(c.sum()) >= keep_frac * biggest:
+        if int(c.sum()) >= keep_frac * big:
             out |= c
     return out
 
 
+def erode(m, n):
+    e = m.copy()
+    for _ in range(n):
+        f = e.copy()
+        f[1:, :] &= e[:-1, :]; f[:-1, :] &= e[1:, :]
+        f[:, 1:] &= e[:, :-1]; f[:, :-1] &= e[:, 1:]
+        e = f
+    return e
+
+
 def process(cid, fname, box, tol, white=False):
-    im = Image.open(os.path.join(SRC, fname)).convert("RGB")
+    im = Image.open(os.path.join(SOURCE, fname)).convert("RGB")
     W, H = im.size
     x0, y0, x1, y1 = box
     crop = im.crop((int(x0 * W), int(y0 * H), int(x1 * W), int(y1 * H)))
     arr = np.asarray(crop).astype(np.int16)
     ch, cw, _ = arr.shape
 
-    # color de fondo = mediana de un marco fino en el borde
     border = np.concatenate([
-        arr[:6, :, :].reshape(-1, 3), arr[-6:, :, :].reshape(-1, 3),
-        arr[:, :6, :].reshape(-1, 3), arr[:, -6:, :].reshape(-1, 3),
+        arr[:8, :, :].reshape(-1, 3), arr[-8:, :, :].reshape(-1, 3),
+        arr[:, :8, :].reshape(-1, 3), arr[:, -8:, :].reshape(-1, 3),
     ])
     bg = np.median(border, axis=0)
-
     dist = np.sqrt(((arr - bg) ** 2).sum(axis=2))
     mn = arr.min(axis=2)
-    if white:
-        # sujeto claro (gato blanco/crema): NO tratar "brillante" como fondo,
-        # solo lo muy parecido al color exacto del borde
-        bg_like = dist < tol
-    else:
-        bg_like = (dist < tol) | (mn > 232)
+    bg_like = dist < tol if white else ((dist < tol) | (mn > 232))
 
     seed = np.zeros((ch, cw), bool)
     seed[0, :] = seed[-1, :] = seed[:, 0] = seed[:, -1] = True
     background = reconstruct(seed, bg_like)
+    fg = largest_components(~background, keep_frac=0.06 if white else 0.10)
+    fg = ~reconstruct(seed, ~fg)                 # rellena huecos internos
+    fg = erode(fg, 1 if white else 2)            # quita el halo del matte
 
-    fg = ~background
-    fg = largest_components(fg, keep_frac=0.05 if white else 0.12)
-
-    # limpiar: rellenar huecos internos, erosionar y suavizar
-    fg_filled = ~reconstruct(seed, ~fg)          # fondo real = lo conectado al borde
-    er = fg_filled.copy()
-    for _ in range(1 if white else 2):
-        e = er.copy()
-        e[1:, :] &= er[:-1, :]; e[:-1, :] &= er[1:, :]
-        e[:, 1:] &= er[:, :-1]; e[:, :-1] &= er[:, 1:]
-        er = e
-    alpha = (er.astype(np.uint8)) * 255
-    a_img = Image.fromarray(alpha, "L").filter(ImageFilter.GaussianBlur(0.6))
-
+    a_img = Image.fromarray((fg.astype(np.uint8) * 255), "L").filter(ImageFilter.GaussianBlur(0.6))
     out = crop.convert("RGBA")
     out.putalpha(a_img)
-
-    # recortar a contenido
-    bbox = out.getbbox()
-    if bbox:
-        out = out.crop(bbox)
-    out = out.crop((-PAD, -PAD, out.width + PAD, out.height + PAD)) if False else out
-    # padding manual transparente
-    padded = Image.new("RGBA", (out.width + 2 * PAD, out.height + 2 * PAD), (0, 0, 0, 0))
-    padded.paste(out, (PAD, PAD), out)
-    out = padded
-
-    scale = TARGET_H / out.height
-    out = out.resize((max(1, round(out.width * scale)), TARGET_H), Image.LANCZOS)
-
-    dst = os.path.join(OUT, cid + ".png")
-    out.save(dst)
-    op = (np.asarray(out)[:, :, 3] > 16).mean()
-    print(f"{cid:10s} {fname:42s} -> {out.size}  opaco={op*100:4.1f}%")
+    bb = out.getbbox()
+    if bb:
+        out = out.crop(bb)
+    pad = Image.new("RGBA", (out.width + 2 * PAD, out.height + 2 * PAD), (0, 0, 0, 0))
+    pad.paste(out, (PAD, PAD), out)
+    out = pad
+    sc = TARGET_H / out.height
+    out = out.resize((max(1, round(out.width * sc)), TARGET_H), Image.LANCZOS)
+    out.save(os.path.join(OUT, cid + ".png"))
+    op = (np.asarray(out)[:, :, 3] > 16).mean() * 100
+    print(f"{cid:10s} {fname:48s} -> {out.size}  opaco={op:4.1f}%")
 
 
 if __name__ == "__main__":
