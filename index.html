@@ -153,7 +153,7 @@ const sfx = {
 
 /* ---- música de combate (procedural, estilo oscuro / Mortal Kombat) ---- */
 const music = {
-  on: false, master: null, drone: [], timer: null, step: 0, next: 0, bpm: 134,
+  on: false, master: null, drone: [], timer: null, step: 0, next: 0, bpm: 128,
   start() {
     if (this.on) return;
     try {
@@ -206,26 +206,42 @@ const music = {
       this.step = (this.step + 1) % 32;
     }
   },
+  // tema original, estilo synth ochentoso de peli de artes marciales (no es ningún tema real)
   play(s, t) {
-    const R = 55;                                     // La menor, tono oscuro
-    const b = s % 16, bar2 = s >= 16;
-    if ([0, 3, 6, 8, 11, 14].includes(b)) this.note(95, t, 0.14, "sine", 0.6, 30);        // bombo
-    if (b === 7 || b === 15) this.note(200, t, 0.16, "triangle", 0.32, 62);               // tom tribal
-    if (b % 2 === 1) this.note(5000 + Math.random() * 500, t, 0.02, "square", 0.012);     // hat
-    if (b % 2 === 0) {                                                                    // bajo
-      const seq = [0, 0, 3, 0, 0, -2, 3, 5];
-      const st = seq[(b / 2) | 0];
-      const f = R * Math.pow(2, st / 12);
-      this.note(f, t, 0.13, "sawtooth", 0.14, f * 0.985);
+    const R = 55;                                     // La (A1)
+    const semi = (n) => R * Math.pow(2, n / 12);
+    const b = s % 16;
+    const half = (s / 8) | 0;                         // 0..3 en el loop de 2 compases
+    const chord = [0, -2, -4, -2][half];             // Am - G - F - G
+    const arp = [0, 7, 12, 7, 0, 7, 12, 19];         // arpegio de quintas (potencia)
+
+    // --- batería ---
+    if (b % 4 === 0) this.note(104, t, 0.14, "sine", 0.55, 38);                            // bombo 4x4
+    if (b === 4 || b === 12) {                                                             // caja con "gate"
+      this.note(210, t, 0.10, "triangle", 0.30, 90);
+      this.note(2000, t, 0.07, "square", 0.05);
+      this.note(1400, t, 0.16, "sawtooth", 0.02, 700);
     }
-    const lseq = { 0: 12, 6: 15, 10: 19 };                                                // lead ominoso
-    if (b in lseq) {
-      const semi = lseq[b] + (bar2 ? -2 : 0);
-      this.note(R * Math.pow(2, semi / 12), t, b === 10 ? 0.24 : 0.14, "sawtooth", 0.05);
+    this.note(b % 2 ? 6400 : 5200, t, 0.02, b === 14 ? 0.05 : 0.014, "square");            // hats
+
+    // --- bajo / sub ---
+    if (b % 8 === 0) this.note(semi(chord - 12), t, 0.42, "sine", 0.34, semi(chord - 12) * 0.99);
+    if (b % 2 === 0) {                                                                     // arpegio saw
+      const n = chord + arp[(b / 2) | 0];
+      const f = semi(n);
+      this.note(f, t, 0.135, "sawtooth", 0.13, f * 0.992);
     }
-    if (s === 28) {                                                                       // stab de tensión (tritono)
-      this.note(R * 2, t, 0.32, "sawtooth", 0.05);
-      this.note(R * 2 * Math.pow(2, 6 / 12), t, 0.32, "sawtooth", 0.04);
+
+    // --- acorde de "metales" al empezar cada medio compás ---
+    if (b === 0 || b === 8) {
+      for (const iv of [0, 7, 12]) this.note(semi(chord + 12 + iv), t, 0.5, "sawtooth", 0.045);
+    }
+
+    // --- lead heroico (melodía propia, pentatónica de Am) ---
+    const lead = { 0: 24, 3: 27, 6: 31, 8: 29, 11: 31, 14: 34, 16: 36, 19: 34, 22: 31, 24: 29, 27: 31, 30: 36 };
+    if (s in lead) {
+      const f = semi(lead[s]);
+      this.note(f, t, [8, 14, 30].includes(s % 16) ? 0.30 : 0.17, "sawtooth", 0.05, f * 1.01);
     }
   },
 };
