@@ -261,7 +261,7 @@ class Fighter {
   hurtbox() {
     const s = this.scale;
     if (this.crouching && this.grounded)
-      return { x: this.x - 24 * s, y: this.y - 58 * s, w: 48 * s, h: 58 * s };
+      return { x: this.x - 25 * s, y: this.y - 46 * s, w: 50 * s, h: 46 * s };
     if (!this.grounded)
       return { x: this.x - 20 * s, y: this.y - 92 * s, w: 40 * s, h: 84 * s };
     return { x: this.x - 22 * s, y: this.y - 96 * s, w: 44 * s, h: 96 * s };
@@ -439,6 +439,11 @@ class Fighter {
         const mv = (input.right ? 1 : 0) - (input.left ? 1 : 0);
         this.vx = mv * WALK * this.char.stats.spd;
         this.state = mv !== 0 ? "walk" : "idle";
+        if (mv !== 0) {                          // polvo en cada paso
+          this.walkT = (this.walkT || 0) + dt;
+          const step = Math.floor(this.walkT * 4.1);
+          if (step !== this._step) { this._step = step; spawnDust(this.x - mv * 12 * this.scale, GROUND, 2); }
+        } else this.walkT = 0;
       } else {
         this.vx *= Math.pow(0.01, dt);
         this.state = this.blocking ? "block" : "crouch";
@@ -476,7 +481,7 @@ class Fighter {
 let projectiles = [], particles = [];
 function spawnProjectile(f) {
   const s = f.char.sp;
-  const x = f.x + f.facing * 36, y = f.y - 62 * f.scale;
+  const x = f.x + f.facing * 36, y = f.y - 68 * f.scale;   // a la altura del pecho: agacharse lo esquiva
   projectiles.push({
     x, y,
     vx: f.facing * (s.speed || 430), face: f.facing,
@@ -657,8 +662,11 @@ function aiInput(f, opp) {
   const inp = { left: false, right: false, up: false, down: false, block: false, punch: false, kick: false, special: false };
 
   // react to projectiles
-  const incoming = projectiles.find((p) => p.owner !== f && Math.sign(p.vx) === Math.sign(f.x - p.x) && Math.abs(p.x - f.x) < 260);
-  if (incoming && Math.random() < 0.14) { a.mode = Math.random() < 0.5 ? "jump" : "block"; a.t = 0.3; }
+  const incoming = projectiles.find((p) => p.owner !== f && Math.sign(p.vx) === Math.sign(f.x - p.x) && Math.abs(p.x - f.x) < 300);
+  if (incoming && Math.abs(incoming.x - f.x) < 150 && Math.random() < 0.5) {
+    const r = Math.random();
+    a.mode = r < 0.5 ? "duck" : r < 0.8 ? "jump" : "block"; a.t = 0.35;
+  }
 
   if (a.t <= 0) {
     a.t = 0.16 + Math.random() * 0.3;
@@ -681,6 +689,7 @@ function aiInput(f, opp) {
       else inp[toward] = true;
       break;
     case "jump": inp.up = true; a.mode = "approach"; break;
+    case "duck": inp.down = true; if (Math.random() < 0.04) a.mode = "approach"; break;
     case "jumpin":
       inp[toward] = true;
       if (f.grounded && Math.random() < 0.4) inp.up = true;
@@ -1223,9 +1232,15 @@ function drawSpriteFighter(f) {
 
   let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1;
   if (st === "idle" || st === "block") dy = -Math.abs(Math.sin(t * 3)) * 2;
-  else if (st === "walk") { dy = -Math.abs(Math.sin(t * 12)) * 3; rot = -Math.sin(t * 12) * 0.04; }
+  else if (st === "walk") {
+    const wt = (f.walkT || t) * 13;
+    dy = -Math.abs(Math.sin(wt)) * 5;                 // rebote del paso
+    rot = Math.sin(wt) * 0.055;                       // balanceo
+    sx = 1 + Math.sin(wt) * 0.035;                    // zancada
+    dx = 2 + Math.abs(Math.sin(wt)) * 2;             // se inclina al andar
+  }
   else if (st === "jump") { dy = f.vy < 0 ? -4 : 3; rot = f.vy < 0 ? -0.06 : 0.05; }
-  else if (st === "crouch") { sy = 0.72; sx = 1.08; }
+  else if (st === "crouch") { sy = 0.6; sx = 1.14; dx = -4; rot = 0.03; }   // se agacha y esquiva
   else if (st === "hitstun") { rot = 0.2; dx = -6; }
   if (f.blocking) { sx = 0.93; dx = -3; }
   if (f.win) dy = -Math.abs(Math.sin(t * 6)) * 6;
