@@ -95,8 +95,8 @@
   </div>
   <button id="touchToggle" title="Controles en pantalla">📱</button>
   <div class="hint">
-    Controles por defecto — <b>P1</b>: A/D · W · S · F golpe · G patada · V bloquear · B especial &nbsp;|&nbsp;
-    <b>P2</b>: ←/→ · ↑ · ↓ · 1 · 2 · 3 · 4<br>
+    Controles por defecto — <b>P1</b>: ←/→ · ↑ · ↓ · I golpe · O patada · J bloquear · K especial &nbsp;|&nbsp;
+    <b>P2</b>: A/D · W · S · 1 · 2 · 3 · 4<br>
     Enter confirmar · M silenciar · P pausa · R reiniciar &nbsp;·&nbsp; <b>se pueden cambiar en el menú → CONTROLES</b>
   </div>
 
@@ -257,8 +257,8 @@ const music = {
 const keys = {}, pressed = {};
 let captureCb = null;              // si está puesto, la próxima tecla se captura (remapeo)
 
-const DEFAULT_MAP1 = { left:"KeyA", right:"KeyD", up:"KeyW", down:"KeyS", punch:"KeyF", kick:"KeyG", block:"KeyV", special:"KeyB" };
-const DEFAULT_MAP2 = { left:"ArrowLeft", right:"ArrowRight", up:"ArrowUp", down:"ArrowDown", punch:"Digit1", kick:"Digit2", block:"Digit3", special:"Digit4" };
+const DEFAULT_MAP1 = { left:"ArrowLeft", right:"ArrowRight", up:"ArrowUp", down:"ArrowDown", punch:"KeyI", kick:"KeyO", block:"KeyJ", special:"KeyK" };
+const DEFAULT_MAP2 = { left:"KeyA", right:"KeyD", up:"KeyW", down:"KeyS", punch:"Digit1", kick:"Digit2", block:"Digit3", special:"Digit4" };
 const MAP1 = { ...DEFAULT_MAP1 }, MAP2 = { ...DEFAULT_MAP2 };
 const ACTIONS = [
   ["left","Izquierda"], ["right","Derecha"], ["up","Saltar"], ["down","Agacharse"],
