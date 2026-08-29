@@ -80,6 +80,21 @@ const sfx = {
   ko:    () => { tone(200, 0.3, "sawtooth", 0.09, 70); setTimeout(() => tone(110, 0.4, "sawtooth", 0.08, 50), 160); },
   ui:    () => tone(440, 0.05, "square", 0.03),
   round: () => { tone(523, 0.1, "square", 0.05); setTimeout(() => tone(784, 0.16, "square", 0.05), 110); },
+  whip:  () => { tone(240, 0.04, "sawtooth", 0.05, 1400); tone(90, 0.12, "square", 0.05, 40); },
+  heal:  () => { tone(523, 0.12, "sine", 0.04, 784); setTimeout(() => tone(659, 0.18, "sine", 0.03, 988), 90); },
+  cast(shape) {
+    switch (shape) {
+      case "bolt":     tone(1300, 0.05, "square", 0.045, 380); tone(760, 0.09, "sawtooth", 0.03, 180); break;
+      case "runebolt": tone(150, 0.28, "sine", 0.05, 85); tone(620, 0.14, "triangle", 0.03, 300); break;
+      case "knife":    tone(680, 0.06, "sawtooth", 0.035, 1500); break;
+      case "shuriken": tone(1700, 0.04, "square", 0.03, 2500); tone(950, 0.11, "triangle", 0.02, 1700); break;
+      case "orb":      tone(140, 0.30, "sine", 0.06, 68); tone(300, 0.16, "sine", 0.03, 170); break;
+      case "om":       tone(180, 0.55, "sine", 0.06, 176); tone(270, 0.55, "sine", 0.03, 264); break;
+      case "katana":   tone(2100, 0.05, "square", 0.03, 3100); tone(1400, 0.20, "triangle", 0.025, 780); break;
+      case "energy":   tone(520, 0.18, "sine", 0.05, 170); tone(260, 0.12, "triangle", 0.03, 120); break;
+      default:         tone(420, 0.18, "triangle", 0.05, 180);
+    }
+  },
 };
 
 /* ============================================================ INPUT */
@@ -177,7 +192,7 @@ const ROSTER = [
     col:{fur:"#e8843c", fur2:"#f0b070", accent:"#211f24", trim:"#e8a83c", eye:"#7ad06a", nose:"#d98a6a"},
     stats:{hp:100, spd:1.20, pow:0.94, wt:0.90, jump:1.06},
     art:{ears:"cat", hat:"headband", cape:"none", body:"normal", katana:true, scar:true},
-    sp:{name:"Tajo de Katana", kind:"dash", multi:true, cost:38} },
+    sp:{name:"Katana Voladora", kind:"projectile", shape:"katana", pcolor:"#e6ecf5", speed:520, r:15, dmg:12, boomerang:true, cost:38} },
   { id:"atlas", name:"Atlas", tag:"Guardián del Laberinto",
     col:{fur:"#f2a9c0", fur2:"#f8c8d7", accent:"#8a97a3", trim:"#3fd6e0", eye:"#e2a23c", nose:"#d98aa5"},
     stats:{hp:122, spd:0.74, pow:1.26, wt:1.38, jump:0.84},
@@ -307,10 +322,10 @@ class Fighter {
       sfx.swing();
     } else if (sp.kind === "projectile") {
       this.atk = { type: "projectile", def: { startup: 0.14, active: 0, recovery: 0.34 }, t: 0, spawned: false };
-      sfx.fire();
+      sfx.cast(sp.shape);
     } else if (sp.kind === "rope") {
       this.atk = { type: "rope", def: ATK.rope, t: 0, hasHit: false, hitCount: 0 };
-      sfx.swing();
+      sfx.whip();
     } else if (sp.kind === "grab") {
       this.atk = { type: "grab", def: ATK.grab, t: 0, hasHit: false };
       sfx.swing();
@@ -490,6 +505,7 @@ function spawnProjectile(f) {
     color: s.pcolor || "#ffd24a",
     shape: s.shape || (s.salmon ? "salmon" : s.crescent ? "orb" : "orb"),
     drain: s.drain || 0,
+    boomerang: !!s.boomerang, bt: 0,
     dmg: Math.round((s.dmg || 9) * f.char.stats.pow), stun: 0.5,
   });
   spawnSpark(x, y, s.pcolor || "#ffd24a", 8);
@@ -799,6 +815,15 @@ function update(dt) {
 
     // projectiles
     for (const p of projectiles) {
+      if (p.boomerang) {                          // katana de Kai: va y vuelve
+        p.bt += sdt;
+        if (p.bt < 0.5) p.vx = p.face * (520 - p.bt * 700);
+        else {
+          const toOwner = Math.sign(p.owner.x - p.x) || -p.face;
+          p.vx = Math.max(-820, Math.min(820, p.vx + toOwner * 2200 * sdt));
+          if (Math.abs(p.owner.x - p.x) < 48) p.life = 0;   // volvió a la mano
+        }
+      }
       p.x += p.vx * sdt; p.life -= sdt; p.spin += sdt * 20;
       const target = p.owner === f1 ? f2 : f1;
       if (target.invuln <= 0 && !target.ko) {
@@ -814,6 +839,7 @@ function update(dt) {
             if (p.drain) {                       // Ohm de Yubari: roba vida
               const heal = Math.round(p.dmg * p.drain);
               p.owner.hp = Math.min(p.owner.maxhp, p.owner.hp + heal);
+              sfx.heal();
               for (let i = 0; i < 6; i++) particles.push({
                 x: p.owner.x + (Math.random() - .5) * 30, y: p.owner.y - 40 - Math.random() * 50,
                 vx: (Math.random() - .5) * 30, vy: -40 - Math.random() * 40,
@@ -825,7 +851,7 @@ function update(dt) {
         }
       }
     }
-    projectiles = projectiles.filter((p) => p.life > 0 && p.x > -40 && p.x < W + 40);
+    projectiles = projectiles.filter((p) => p.life > 0 && p.x > -140 && p.x < W + 140);
 
     updateParticles(sdt);
 
@@ -1074,6 +1100,18 @@ function drawProjectile(p) {
       ctx.beginPath(); ctx.moveTo(0, -p.r); ctx.lineTo(4, -3); ctx.lineTo(-4, -3); ctx.closePath(); ctx.fill();
     }
     ctx.fillStyle = "#2a2a30"; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
+  } else if (p.shape === "katana") {            // katana de Kai, revoleada
+    ctx.strokeStyle = "rgba(220,230,245,.22)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 30, 0, 7); ctx.stroke();     // estela circular
+    ctx.rotate(p.spin * 3.4);
+    ctx.strokeStyle = p.color; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(34, 0); ctx.stroke();   // hoja
+    ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(32, 0); ctx.stroke();    // filo
+    ctx.fillStyle = "#d8a53a";
+    ctx.fillRect(-16, -4, 4, 8);                                            // guarda (tsuba)
+    ctx.strokeStyle = "#3a2a1a"; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(-26, 0); ctx.stroke();  // mango
   } else if (p.shape === "energy") {            // bola de energía de Michiloco
     const pr = p.r * (1 + 0.12 * Math.sin(p.spin * 5));
     const g = ctx.createRadialGradient(0, 0, 1, 0, 0, pr * 1.5);
