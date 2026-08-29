@@ -7,17 +7,17 @@ SRC = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(SRC, "sprites")
 os.makedirs(OUT, exist_ok=True)
 
-# id -> (archivo, caja de recorte en fracciones [x0,y0,x1,y1], tolerancia de fondo)
+# id -> (archivo, caja de recorte en fracciones [x0,y0,x1,y1], tolerancia de fondo, sujeto_claro)
 JOBS = {
-    "michiloco": ("Michiloco_Character_Reference.jpg",              (0.752, 0.150, 0.958, 0.545), 26),
-    "lupita":    ("sorceress_princess_lupita_reference_sheet_5.jpg",(0.265, 0.125, 0.505, 0.470), 26),
-    "bruce":     ("bruce_cat_turnaround_sheet.jpg",                 (0.058, 0.185, 0.225, 0.560), 36),
-    "kai":       ("kai_character_design_sheet.jpg",                 (0.705, 0.545, 0.975, 0.950), 40),
-    "atlas":     ("atlas_character_sheet.jpg",                      (0.045, 0.115, 0.345, 0.575), 34),
-    "nocturna":  ("nocturna_shadow_queen_sheet.jpg",               (0.105, 0.075, 0.315, 0.580), 34),
-    "viper":     ("viper_character_sheet.jpg",                      (0.118, 0.050, 0.285, 0.535), 36),
-    "yubari":    ("master_yubari_buddhist_reference_sheet.jpg",     (0.095, 0.115, 0.315, 0.625), 34),
-    "ratin":     ("ratin_ninja_reference_sheet_1.jpg",             (0.055, 0.055, 0.245, 0.625), 36),
+    "michiloco": ("Michiloco_Character_Reference.jpg",              (0.752, 0.132, 0.958, 0.535), 20, True),
+    "lupita":    ("sorceress_princess_lupita_reference_sheet_5.jpg",(0.072, 0.142, 0.268, 0.468), 20, True),
+    "bruce":     ("bruce_cat_turnaround_sheet.jpg",                 (0.058, 0.185, 0.225, 0.560), 36, False),
+    "kai":       ("kai_character_design_sheet.jpg",                 (0.705, 0.545, 0.975, 0.950), 40, False),
+    "atlas":     ("atlas_character_sheet.jpg",                      (0.045, 0.115, 0.345, 0.575), 34, False),
+    "nocturna":  ("nocturna_shadow_queen_sheet.jpg",               (0.105, 0.075, 0.315, 0.580), 34, False),
+    "viper":     ("viper_character_sheet.jpg",                      (0.118, 0.050, 0.285, 0.535), 36, False),
+    "yubari":    ("master_yubari_buddhist_reference_sheet.jpg",     (0.095, 0.115, 0.315, 0.625), 34, False),
+    "ratin":     ("ratin_ninja_reference_sheet_1.jpg",             (0.055, 0.055, 0.245, 0.625), 36, False),
 }
 
 TARGET_H = 460
@@ -69,7 +69,7 @@ def largest_components(opaque, keep_frac=0.12):
     return out
 
 
-def process(cid, fname, box, tol):
+def process(cid, fname, box, tol, white=False):
     im = Image.open(os.path.join(SRC, fname)).convert("RGB")
     W, H = im.size
     x0, y0, x1, y1 = box
@@ -86,19 +86,24 @@ def process(cid, fname, box, tol):
 
     dist = np.sqrt(((arr - bg) ** 2).sum(axis=2))
     mn = arr.min(axis=2)
-    bg_like = (dist < tol) | (mn > 232)
+    if white:
+        # sujeto claro (gato blanco/crema): NO tratar "brillante" como fondo,
+        # solo lo muy parecido al color exacto del borde
+        bg_like = dist < tol
+    else:
+        bg_like = (dist < tol) | (mn > 232)
 
     seed = np.zeros((ch, cw), bool)
     seed[0, :] = seed[-1, :] = seed[:, 0] = seed[:, -1] = True
     background = reconstruct(seed, bg_like)
 
     fg = ~background
-    fg = largest_components(fg)
+    fg = largest_components(fg, keep_frac=0.05 if white else 0.12)
 
-    # limpiar: rellenar huecos internos, erosionar 2px (quita halo de matte) y suavizar
+    # limpiar: rellenar huecos internos, erosionar y suavizar
     fg_filled = ~reconstruct(seed, ~fg)          # fondo real = lo conectado al borde
     er = fg_filled.copy()
-    for _ in range(2):
+    for _ in range(1 if white else 2):
         e = er.copy()
         e[1:, :] &= er[:-1, :]; e[:-1, :] &= er[1:, :]
         e[:, 1:] &= er[:, :-1]; e[:, :-1] &= er[:, 1:]
@@ -131,6 +136,6 @@ def process(cid, fname, box, tol):
 if __name__ == "__main__":
     only = sys.argv[1:] if len(sys.argv) > 1 else list(JOBS)
     for cid in only:
-        f, box, tol = JOBS[cid]
-        process(cid, f, box, tol)
+        f, box, tol, white = JOBS[cid]
+        process(cid, f, box, tol, white)
     print("listo ->", OUT)
