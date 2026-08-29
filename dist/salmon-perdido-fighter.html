@@ -63,6 +63,11 @@
     border-radius:8px;border:1px solid #ffffff30;background:rgba(18,24,38,.6);color:#eef2ff;
     font-size:16px;line-height:1;cursor:pointer}
   body.touch #touchToggle{background:rgba(74,163,255,.5);border-color:#fff}
+
+  #exitBtn{position:absolute;left:10px;top:10px;z-index:15;width:34px;height:34px;display:none;
+    border-radius:8px;border:1px solid #ffffff35;background:rgba(18,24,38,.55);color:#eef2ff;
+    font:700 15px ui-monospace,monospace;line-height:1;cursor:pointer;touch-action:none}
+  #exitBtn:active{background:rgba(255,84,112,.55);border-color:#fff}
 </style>
 </head>
 <body>
@@ -85,6 +90,7 @@
         </div>
       </div>
       <div class="rotate">Girá el teléfono para jugar ↺</div>
+      <button id="exitBtn" title="Salir de la pelea">✕</button>
     </div>
   </div>
   <button id="touchToggle" title="Controles en pantalla">📱</button>
@@ -367,6 +373,21 @@ applyTouch(IS_TOUCH);
   };
   cv.addEventListener("pointerdown", tapMenu);
   cv.addEventListener("touchstart", tapMenu, { passive: true });
+
+  // botón de salir de la pelea (visible sólo en combate / elección de escenario)
+  const exitBtn = document.getElementById("exitBtn");
+  const exitFight = (e) => {
+    if (e) e.preventDefault();
+    pressed["Escape"] = true;
+  };
+  exitBtn.addEventListener("click", exitFight);
+  exitBtn.addEventListener("touchstart", exitFight, { passive: false });
+  function exitBtnTick() {
+    exitBtn.style.display = ["fight", "roundend", "stageselect"].includes(game.scene) ? "block" : "none";
+    requestAnimationFrame(exitBtnTick);
+  }
+  requestAnimationFrame(exitBtnTick);   // difiere hasta que `game` exista
+
   const frame = document.querySelector(".frame");
   frame.addEventListener("touchmove", (e) => { if (document.body.classList.contains("touch")) e.preventDefault(); }, { passive: false });
   addEventListener("contextmenu", (e) => { if (document.body.classList.contains("touch")) e.preventDefault(); });
@@ -768,6 +789,8 @@ const game = {
   selPick: 0,               // in 1P: 0 -> choose P1, 1 -> choose opponent
   cur1: 0, cur2: 4,
   lock1: false, lock2: false,
+  stageCursor: 0,           // 0 = aleatorio, 1..8 = escenario
+  stagePick: null,          // id fijo elegido, o null = aleatorio
   pick1: null, pick2: null,
   // fight
   f1: null, f2: null,
@@ -781,7 +804,8 @@ const game = {
   sceneT: 0,
 };
 const STAGES = ["dojo", "hechiceria", "laberinto", "espejos", "muelle", "oceano", "sparta", "flotante"];
-const STAGE_FLOOR = { dojo:0.80, hechiceria:0.82, laberinto:0.80, espejos:0.72, muelle:0.66, oceano:0.80, sparta:0.72, flotante:0.80 };
+const STAGE_FLOOR = { dojo:0.80, hechiceria:0.82, laberinto:0.80, espejos:0.74, muelle:0.72, oceano:0.82, sparta:0.88, flotante:0.80 };
+const STAGE_NAME = { dojo:"Dojo", hechiceria:"Escuela de Hechicería", laberinto:"Laberinto", espejos:"Sala de Espejos", muelle:"Muelle", oceano:"Océano", sparta:"Ruinas de Esparta", flotante:"Isla Flotante" };
 const STAGE_IMG = {};
 (function preloadStages() {
   for (const id of STAGES) {
@@ -791,11 +815,67 @@ const STAGE_IMG = {};
   }
 })();
 
+function toStageSelect() {
+  game.scene = "stageselect";
+  game.sceneT = 0;
+}
 function startMatch() {
   game.scene = "versus";
   game.sceneT = 0;
   game.round = 1; game.wins = [0, 0];
-  game.stage = STAGES[(Math.random() * STAGES.length) | 0];
+  game.stage = game.stagePick || STAGES[(Math.random() * STAGES.length) | 0];
+}
+function updateStageSelect() {
+  if (pressed["Escape"] || pressed["Backspace"]) { game.scene = "select"; resetSelect(); return; }
+  const move = (dx, dy) => {
+    let c = game.stageCursor % 3, r = (game.stageCursor / 3) | 0;
+    c = clamp(c + dx, 0, 2); r = clamp(r + dy, 0, 2);
+    game.stageCursor = clamp(r * 3 + c, 0, 8); sfx.ui();
+  };
+  if (pressed[MAP1.left] || pressed[MAP2.left]) move(-1, 0);
+  if (pressed[MAP1.right] || pressed[MAP2.right]) move(1, 0);
+  if (pressed[MAP1.up] || pressed[MAP2.up]) move(0, -1);
+  if (pressed[MAP1.down] || pressed[MAP2.down]) move(0, 1);
+  if (anyConfirm()) {
+    game.stagePick = game.stageCursor === 0 ? null : STAGES[game.stageCursor - 1];
+    sfx.round();
+    startMatch();
+  }
+}
+function drawStageSelect() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#161d33"); g.addColorStop(1, "#080b14");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center"; ctx.fillStyle = "#eef2ff"; ctx.font = "bold 22px monospace";
+  ctx.fillText("ELIGE ESCENARIO", W / 2, 44);
+
+  const cell = 150, gw = cell * 3, ox = (W - gw) / 2, oy = 70;
+  for (let i = 0; i < 9; i++) {
+    const x = ox + (i % 3) * cell, y = oy + ((i / 3) | 0) * cell;
+    ctx.save();
+    ctx.beginPath(); roundRect(x + 5, y + 5, cell - 10, cell - 10, 8); ctx.clip();
+    if (i === 0) {
+      ctx.fillStyle = "#0e1424"; ctx.fillRect(x, y, cell, cell);
+      ctx.fillStyle = "#8b95b8"; ctx.font = "40px monospace"; ctx.fillText("🎲", x + cell / 2, y + cell / 2 + 8);
+    } else {
+      const img = STAGE_IMG[STAGES[i - 1]];
+      if (img && img.width) {
+        const s = Math.max((cell - 10) / img.width, (cell - 10) / img.height);
+        ctx.drawImage(img, x + cell / 2 - img.width * s / 2, y + cell / 2 - img.height * s / 2, img.width * s, img.height * s);
+      } else { ctx.fillStyle = "#0e1424"; ctx.fillRect(x, y, cell, cell); }
+    }
+    ctx.fillStyle = "rgba(6,8,14,.75)"; ctx.fillRect(x, y + cell - 34, cell, 34);
+    ctx.fillStyle = "#cdd5f0"; ctx.font = "10px monospace";
+    ctx.fillText(i === 0 ? "ALEATORIO" : (STAGE_NAME[STAGES[i - 1]] || STAGES[i - 1]).toUpperCase(), x + cell / 2, y + cell - 14);
+    ctx.restore();
+    if (game.stageCursor === i) {
+      ctx.strokeStyle = "#4aa3ff"; ctx.lineWidth = 3;
+      roundRect(x + 4, y + 4, cell - 8, cell - 8, 8); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = "#6b7699"; ctx.font = "12px monospace";
+  ctx.fillText("mover con la cruceta · confirmar · ESC para volver", W / 2, oy + 3 * cell + 26);
+  ctx.textAlign = "left";
 }
 function beginRound() {
   const c1 = byId(game.pick1), c2 = byId(game.pick2);
@@ -980,11 +1060,13 @@ function update(dt) {
   if (game.scene === "title") return updateTitle();
   if (game.scene === "controls") return updateControls();
   if (game.scene === "select") return updateSelect();
+  if (game.scene === "stageselect") return updateStageSelect();
   if (game.scene === "versus") {
     if (game.sceneT > 1.6 || anyConfirm()) beginRound();
     return;
   }
   if (game.scene === "roundend") {
+    if (pressed["Escape"]) { music.stop(); game.scene = "select"; resetSelect(); return; }
     game.annTimer -= dt;
     updateParticles(dt);
     if (game.sceneT > 1.9) {
@@ -1006,8 +1088,12 @@ function update(dt) {
   }
 
   // ---------- FIGHT ----------
+  if (pressed["Escape"]) { music.stop(); game.paused = false; game.scene = "select"; resetSelect(); return; }
   if (pressed["KeyP"]) { game.paused = !game.paused; music.setDuck(game.paused); }
-  if (game.paused) return;
+  if (game.paused) {
+    if (anyConfirm()) { game.paused = false; music.setDuck(false); }
+    return;
+  }
   if (pressed["KeyR"] && game.roundState === "play") { beginRound(); return; }
 
   const f1 = game.f1, f2 = game.f2;
@@ -1209,7 +1295,7 @@ function updateSelect() {
       sfx.round();
       if (game.mode === 1) {
         if (game.selPick === 0) { game.pick1 = ROSTER[game.cur1].id; game.selPick = 1; game.cur1 = (game.cur1 + 1) % 9; }
-        else { game.pick2 = ROSTER[game.cur1].id; startMatch(); }
+        else { game.pick2 = ROSTER[game.cur1].id; toStageSelect(); }
       } else {
         game.pick1 = ROSTER[game.cur1].id; game.lock1 = true;
       }
@@ -1222,7 +1308,7 @@ function updateSelect() {
     if (pressed[MAP2.down]) { game.cur2 = moveCur(game.cur2, 0, 1); sfx.ui(); }
     if (pressed[MAP2.punch]) { game.pick2 = ROSTER[game.cur2].id; game.lock2 = true; sfx.round(); }
   }
-  if (game.mode === 2 && game.lock1 && game.lock2) startMatch();
+  if (game.mode === 2 && game.lock1 && game.lock2) toStageSelect();
   if (pressed["Enter"] && game.scene === "select" && game.mode === 2 && game.lock1 && !game.lock2) {
     // allow single-key start vs CPU if P2 idle: press Enter after P1 lock -> P2 random CPU
   }
@@ -1247,6 +1333,7 @@ function render() {
   if (game.scene === "title") return drawTitle();
   if (game.scene === "controls") return drawControls();
   if (game.scene === "select") return drawSelect();
+  if (game.scene === "stageselect") return drawStageSelect();
 
   // shake
   ctx.save();
