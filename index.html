@@ -19,8 +19,8 @@
   body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px;min-height:100%}
   .wrap{width:min(96vw,960px)}
   .frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;
-    box-shadow:0 0 0 1px #1e2a48,0 40px 90px -40px #000;background:#05070d}
-  canvas{width:100%;height:100%;display:block;image-rendering:auto}
+    box-shadow:0 0 0 1px #1e2a48,0 40px 90px -40px #000;background:#05070d;touch-action:none}
+  canvas{width:100%;height:100%;display:block;image-rendering:auto;touch-action:none}
   .hint{width:min(96vw,960px);color:var(--muted);font-size:12px;line-height:1.6;text-align:center;letter-spacing:.03em}
   .hint b{color:var(--ink)}
   .tag{color:var(--muted);font-size:13px;letter-spacing:.14em;text-transform:uppercase}
@@ -288,7 +288,9 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 
 /* ---- controles táctiles (teléfono) ---- */
-const IS_TOUCH = window.matchMedia && (window.matchMedia("(pointer: coarse)").matches) || ("ontouchstart" in window);
+const IS_TOUCH = (navigator.maxTouchPoints || navigator.msMaxTouchPoints || 0) > 0
+  || ("ontouchstart" in window)
+  || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
 if (IS_TOUCH) {
   document.body.classList.add("touch");
   const held = {};
@@ -299,15 +301,22 @@ if (IS_TOUCH) {
   };
   for (const b of document.querySelectorAll("#touch button")) {
     const act = b.dataset.k;
-    b.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      try { b.setPointerCapture(e.pointerId); } catch (er) {}
-      setBtn(act, true);
-    }, { passive: false });
-    const rel = (e) => { e.preventDefault(); setBtn(act, false); };
-    b.addEventListener("pointerup", rel);
-    b.addEventListener("pointercancel", rel);
+    const down = (e) => { e.preventDefault(); setBtn(act, true); };
+    const up = (e) => { e.preventDefault(); setBtn(act, false); };
+    // se enganchan pointer + touch + mouse; el guard `held` evita dobles
+    b.addEventListener("pointerdown", down, { passive: false });
+    b.addEventListener("pointerup", up, { passive: false });
+    b.addEventListener("pointercancel", up, { passive: false });
+    b.addEventListener("touchstart", down, { passive: false });
+    b.addEventListener("touchend", up, { passive: false });
+    b.addEventListener("touchcancel", up, { passive: false });
+    b.addEventListener("mousedown", down);
+    b.addEventListener("mouseup", up);
   }
+  // red de seguridad: tocar la pantalla (fuera de los botones) confirma en los menús
+  cv.addEventListener("pointerdown", () => {
+    if (["title", "versus", "roundend", "matchend"].includes(game.scene)) pressed["Enter"] = true;
+  });
   const frame = document.querySelector(".frame");
   frame.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
   addEventListener("contextmenu", (e) => e.preventDefault());
@@ -2141,9 +2150,11 @@ function drawSelect() {
     W / 2, oy + 3 * cell + 46);
 
   ctx.fillStyle = "#6b7699"; ctx.font = "12px monospace";
-  ctx.fillText(game.mode === 2
-    ? "P1 mueve con A/D/W/S y confirma con F   ·   P2 con flechas y 1"
-    : "mueve con A/D/W/S · confirma con F/ENTER", W / 2, H - 20);
+  ctx.fillText(IS_TOUCH
+    ? "movete con la cruceta · P para elegir"
+    : game.mode === 2
+      ? "P1 mueve con A/D/W/S y confirma con F   ·   P2 con flechas y 1"
+      : "mueve con A/D/W/S · confirma con F/ENTER", W / 2, H - 20);
   ctx.textAlign = "left";
 }
 function cursorBox(x, y, cell, color, label, bottom) {
