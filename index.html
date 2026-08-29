@@ -138,6 +138,31 @@ const sfx = {
   jump:  () => tone(320, 0.09, "sine", 0.03, 520),
   fire:  () => tone(420, 0.18, "triangle", 0.05, 180),
   ko:    () => { tone(200, 0.3, "sawtooth", 0.09, 70); setTimeout(() => tone(110, 0.4, "sawtooth", 0.08, 50), 160); },
+  cry(species) {                                   // grito del perdedor según el animal
+    switch (species) {
+      case "cat":                                  // maullido lastimero
+        tone(480, 0.14, "sawtooth", 0.06, 760);
+        setTimeout(() => tone(700, 0.30, "sawtooth", 0.06, 300), 130);
+        break;
+      case "bigcat":                               // aullido grave (pantera)
+        tone(200, 0.20, "sawtooth", 0.08, 320);
+        setTimeout(() => tone(300, 0.42, "sawtooth", 0.07, 150), 170);
+        break;
+      case "mouse":                                // chillidos agudos
+        for (let i = 0; i < 3; i++) setTimeout(() => tone(2200 + i * 400, 0.05, "square", 0.04, 3200), i * 70);
+        break;
+      case "snake":                                // siseo
+        for (let i = 0; i < 8; i++) setTimeout(() => tone(3800 + Math.random() * 2200, 0.04, "sawtooth", 0.02), i * 40);
+        break;
+      case "axolotl":                              // gorjeo/burbujeo
+        tone(320, 0.16, "sine", 0.05, 520);
+        setTimeout(() => tone(260, 0.22, "sine", 0.04, 180), 150);
+        setTimeout(() => tone(900, 0.05, "sine", 0.03, 400), 260);
+        break;
+      default:
+        tone(400, 0.3, "sawtooth", 0.05, 200);
+    }
+  },
   ui:    () => tone(440, 0.05, "square", 0.03),
   round: () => { tone(523, 0.1, "square", 0.05); setTimeout(() => tone(784, 0.16, "square", 0.05), 110); },
   whip:  () => { tone(240, 0.04, "sawtooth", 0.05, 1400); tone(90, 0.12, "square", 0.05, 40); },
@@ -907,7 +932,7 @@ function endRound(winner) {
   game.roundState = "done";
   if (winner === 1) game.wins[0]++;
   else if (winner === 2) game.wins[1]++;
-  game.announce = winner === 0 ? "EMPATE" : (winner === 1 ? "GANA " + shortName(game.pick1) : "GANA " + shortName(game.pick2));
+  game.announce = winner === 0 ? "EMPATE" : (shortName(winner === 1 ? game.pick1 : game.pick2) + " WINS");
   game.annTimer = 1.6;
   game.scene = "roundend";
   game.sceneT = 0;
@@ -1222,6 +1247,10 @@ function resolveKO(winner) {
   game.shake = 16;
   music.stop();
   sfx.ko();
+  // grito del perdedor según su animal
+  const loserId = winner === 1 ? game.pick2 : winner === 2 ? game.pick1 : null;
+  if (winner === 0) { setTimeout(() => { sfx.cry(SPECIES[game.pick1]); sfx.cry(SPECIES[game.pick2]); }, 260); }
+  else if (loserId) { setTimeout(() => sfx.cry(SPECIES[loserId]), 260); }
   const f1 = game.f1, f2 = game.f2;
   if (winner !== 1 && f1.hp <= 0) { f1.ko = true; f1.state = "ko"; f1.vy = -260; f1.vx = -f1.facing * 120; }
   if (winner !== 2 && f2.hp <= 0) { f2.ko = true; f2.state = "ko"; f2.vy = -260; f2.vx = -f2.facing * 120; }
@@ -1569,6 +1598,12 @@ function tintCanvas(im, color) {
   return c;
 }
 const SPRITE_H = 118; // altura del sprite en unidades locales (antes de f.scale)
+
+// especie de cada personaje (para el grito del perdedor)
+const SPECIES = {
+  michiloco: "cat", lupita: "cat", bruce: "cat", kai: "cat", yubari: "cat",
+  nocturna: "bigcat", atlas: "axolotl", viper: "snake", ratin: "mouse",
+};
 
 // arma que cada quien extiende al hacer piña (golpe)
 const MELEE_WEAPON = {
@@ -2236,7 +2271,7 @@ function drawMatchEnd() {
   ctx.textAlign = "center";
   ctx.font = "bold 52px monospace"; ctx.fillStyle = "#ffd24a";
   const w = game.matchWinner;
-  const txt = w === 0 ? "COMBATE NULO" : "GANA " + shortName(w === 1 ? game.pick1 : game.pick2);
+  const txt = w === 0 ? "COMBATE NULO" : shortName(w === 1 ? game.pick1 : game.pick2) + " WINS";
   ctx.fillText(txt, W / 2, H / 2 - 10);
   ctx.font = "16px monospace"; ctx.fillStyle = "#8b95b8";
   ctx.fillText("Marcador  " + game.wins[0] + " – " + game.wins[1], W / 2, H / 2 + 26);
