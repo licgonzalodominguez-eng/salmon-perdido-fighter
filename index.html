@@ -185,7 +185,7 @@ const ROSTER = [
   { id:"nocturna", name:"Nocturna", tag:"Reina de las Sombras",
     col:{fur:"#1d1b26", fur2:"#332f40", accent:"#6a3db0", trim:"#c9a44c", eye:"#b57bf0", nose:"#7a5a8a"},
     stats:{hp:100, spd:0.92, pow:1.00, wt:1.00, jump:1.00},
-    art:{ears:"cat", hat:"crownObsidian", cape:"gownPurple", body:"gown", staff:"orbPurple", streak:true},
+    art:{ears:"cat", hat:"crownObsidian", cape:"gownPurple", body:"gown", staff:"orbPurple", streak:true, flip:true},
     sp:{name:"Orbe de Sombra", kind:"projectile", shape:"orb", pcolor:"#b57bf0", speed:360, r:18, dmg:12, cost:42} },
   { id:"viper", name:"Viper", tag:"Serpiente Sigilosa",
     col:{fur:"#4a5f3a", fur2:"#c9a44c", accent:"#1f392b", trim:"#c9a44c", eye:"#f2d24e", nose:"#2f2f2f"},
@@ -1224,6 +1224,7 @@ function drawSpriteFighter(f) {
   const im = SPRITES[f.char.id], s = f.scale;
   const k = SPRITE_H / im.height, w = im.width * k, h = im.height * k;
   const t = f.st, st = f.state;
+  const flipImg = f.char.art.flip ? -1 : 1;      // algunos dibujos originales miran al revés
 
   ctx.save();
   ctx.translate(f.x, f.y);
@@ -1256,12 +1257,14 @@ function drawSpriteFighter(f) {
   }
 
   ctx.translate(dx, dy); ctx.rotate(rot); ctx.scale(sx, sy);
+  ctx.save(); ctx.scale(flipImg, 1);              // espeja sólo el dibujo si mira al revés
   ctx.drawImage(im, -w / 2, -h, w, h);
   if (f.flash > 0) {
     ctx.globalAlpha = Math.min(1, f.flash * 4);
     ctx.drawImage(SPRITES_W[f.char.id], -w / 2, -h, w, h);
     ctx.globalAlpha = 1;
   }
+  ctx.restore();
 
   // manito que golpea / pierna que patea, dibujada encima del sprite
   if ((st === "attack" || st === "special") && f.atk &&
@@ -1302,7 +1305,9 @@ function drawSpriteFighter(f) {
 
   if (f.invuln > 0 && st === "special") {
     ctx.globalAlpha = 0.4;
-    ctx.drawImage(im, -w / 2 - 7, -h, w, h);
+    ctx.save(); ctx.scale(flipImg, 1);
+    ctx.drawImage(im, -w / 2 - 7 * flipImg, -h, w, h);
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
   ctx.restore();
