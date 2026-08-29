@@ -3,8 +3,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 *.log
-assets/_contact*.png
+assets/_*.png
 
-# variantes de personaje no usadas (se dejan en disco pero no en git)
-assets/source/White_cat_character_sheet_2K_202608290103.jpeg
-assets/source/White_ninja_mouse_figure_pose_202608290100.jpeg
+# fuentes originales de los personajes: quedan en disco, no en git (pesan y se re-generan)
+assets/source/
