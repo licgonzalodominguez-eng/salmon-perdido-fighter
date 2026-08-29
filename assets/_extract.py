@@ -17,7 +17,7 @@ JOBS = {
     "atlas":     ("Pink_axolotl_wearing_stone_armor_202608290101.jpeg",(0.03, 0.03, 0.98, 0.99), 32, ""),
     "nocturna":  ("Cat_queen_standing_in_gown_202608290101.jpeg",     (0.12, 0.01, 0.95, 0.995), 32, ""),
     "bruce":     ("bruce_new.jpeg",                                   (0.360, 0.03, 0.592, 0.945), 64, ""),
-    "yubari":    ("Cat_wearing_green_robe_standing_202608290101.jpeg", (0.245, 0.025, 0.725, 0.955), 52, "soft"),
+    "yubari":    ("Cat_wearing_green_robe_standing_202608290101.jpeg", (0.205, 0.02, 0.80, 0.965), 9, "light"),
     "ratin":     ("Gray_ninja_mouse_standing_2K_202608290101.jpeg",   (0.23, 0.01, 0.69, 0.995), 30, ""),
 }
 
