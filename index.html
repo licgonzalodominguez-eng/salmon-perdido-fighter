@@ -1116,7 +1116,7 @@ const SPRITES = {}, SPRITES_W = {};
     const im = new Image();
     im.onload = () => { SPRITES[r.id] = im; SPRITES_W[r.id] = tintCanvas(im, "#ffffff"); };
     im.onerror = () => { /* sin sprite -> dibujo procedural de reserva */ };
-    im.src = "assets/sprites/" + r.id + ".png";
+    im.src = (window.SPRITE_DATA && window.SPRITE_DATA[r.id]) || ("assets/sprites/" + r.id + ".png");
   }
 })();
 function tintCanvas(im, color) {
@@ -1165,6 +1165,44 @@ function drawSpriteFighter(f) {
     ctx.drawImage(SPRITES_W[f.char.id], -w / 2, -h, w, h);
     ctx.globalAlpha = 1;
   }
+
+  // manito que golpea / pierna que patea, dibujada encima del sprite
+  if ((st === "attack" || st === "special") && f.atk &&
+      ["light", "heavy", "air", "grab", "riposte"].includes(f.atk.type)) {
+    const a = f.atk, col = f.char.col;
+    const phase = a.t < a.def.startup
+      ? -0.28 * (a.t / a.def.startup)                                  // amaga hacia atrás
+      : Math.sin(clamp((a.t - a.def.startup) / a.def.active, 0, 1) * Math.PI); // sale y vuelve
+    const low = !!a.crouch;
+    const kick = a.type === "heavy" && !low;
+    ctx.lineCap = "round";
+    if (kick) {
+      const hx = 2, hy = -SPRITE_H * 0.34;
+      const fx = hx + phase * 60, fy = -SPRITE_H * 0.30 + phase * 6;
+      ctx.strokeStyle = col.fur; ctx.lineWidth = 11;
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(fx, fy); ctx.stroke();
+      ctx.fillStyle = col.accent || col.fur2 || col.fur;
+      ctx.beginPath(); ctx.ellipse(fx + 4, fy, 9, 6, 0, 0, 7); ctx.fill();
+    } else {
+      const shx = 4, shy = -SPRITE_H * (low ? 0.34 : 0.56);
+      const reach = low ? 40 : (a.type === "grab" || a.type === "riposte" ? 54 : 46);
+      const px = shx + phase * reach, py = shy + phase * (low ? 10 : 4);
+      ctx.strokeStyle = col.fur; ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.moveTo(shx, shy); ctx.lineTo(px, py); ctx.stroke();
+      ctx.fillStyle = col.fur2 || col.fur;
+      ctx.beginPath(); ctx.arc(px, py, 7, 0, 7); ctx.fill();
+      ctx.fillStyle = col.accent || "rgba(0,0,0,.25)";
+      ctx.beginPath(); ctx.arc(px, py, 3, 0, 7); ctx.fill();
+    }
+    if (phase > 0.5) {
+      ctx.strokeStyle = "rgba(255,255,255," + (phase - 0.45) * 0.9 + ")";
+      ctx.lineWidth = 3;
+      const ex = (kick ? 6 : 8) + phase * (kick ? 58 : 46);
+      const ey = kick ? -SPRITE_H * 0.30 : -SPRITE_H * (low ? 0.34 : 0.56);
+      ctx.beginPath(); ctx.arc(ex, ey, kick ? 14 : 12, -0.7, 0.7); ctx.stroke();
+    }
+  }
+
   if (f.invuln > 0 && st === "special") {
     ctx.globalAlpha = 0.4;
     ctx.drawImage(im, -w / 2 - 7, -h, w, h);
