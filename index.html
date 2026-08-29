@@ -1021,6 +1021,102 @@ function drawStage(id, t) {
 }
 
 /* ---------- fighter drawing ---------- */
+/* sprites reales recortados de las hojas de personaje (assets/sprites/<id>.png) */
+const SPRITES = {}, SPRITES_W = {};
+(function preloadSprites() {
+  for (const r of ROSTER) {
+    const im = new Image();
+    im.onload = () => { SPRITES[r.id] = im; SPRITES_W[r.id] = tintCanvas(im, "#ffffff"); };
+    im.onerror = () => { /* sin sprite -> dibujo procedural de reserva */ };
+    im.src = "assets/sprites/" + r.id + ".png";
+  }
+})();
+function tintCanvas(im, color) {
+  const c = document.createElement("canvas");
+  c.width = im.width; c.height = im.height;
+  const x = c.getContext("2d");
+  x.drawImage(im, 0, 0);
+  x.globalCompositeOperation = "source-in";
+  x.fillStyle = color; x.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+const SPRITE_H = 118; // altura del sprite en unidades locales (antes de f.scale)
+function drawSpriteFighter(f) {
+  const im = SPRITES[f.char.id], s = f.scale;
+  const k = SPRITE_H / im.height, w = im.width * k, h = im.height * k;
+  const t = f.st, st = f.state;
+
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  if (f.ko) { const lie = clamp(f.st * 3, 0, 1); ctx.rotate(-f.facing * lie * Math.PI / 2.2); ctx.translate(0, -6 * s); }
+  ctx.scale(f.facing * s, s);
+
+  let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1;
+  if (st === "idle" || st === "block") dy = -Math.abs(Math.sin(t * 3)) * 2;
+  else if (st === "walk") { dy = -Math.abs(Math.sin(t * 12)) * 3; rot = -Math.sin(t * 12) * 0.04; }
+  else if (st === "jump") { dy = f.vy < 0 ? -4 : 3; rot = f.vy < 0 ? -0.06 : 0.05; }
+  else if (st === "crouch") { sy = 0.72; sx = 1.08; }
+  else if (st === "hitstun") { rot = 0.2; dx = -6; }
+  if (f.blocking) { sx = 0.93; dx = -3; }
+  if (f.win) dy = -Math.abs(Math.sin(t * 6)) * 6;
+  if (st === "attack" || st === "special") {
+    const a = f.atk;
+    const prog = a ? clamp((a.t - a.def.startup) / Math.max(0.001, a.def.active), 0, 1) : 0;
+    const ext = Math.sin(prog * Math.PI);
+    if (a && (a.type === "dash")) { dx = 12; rot = -0.15; sx = 1.06; }
+    else if (a && a.type === "projectile") { dx = 4; rot = -0.03; }
+    else if (a && a.type === "counter") rot = -0.04;
+    else { dx = ext * 15; sx = 1 + ext * 0.07; rot = -ext * 0.05; }
+    if (f.crouching && a && a.type !== "dash") sy = 0.8;
+  }
+
+  ctx.translate(dx, dy); ctx.rotate(rot); ctx.scale(sx, sy);
+  ctx.drawImage(im, -w / 2, -h, w, h);
+  if (f.flash > 0) {
+    ctx.globalAlpha = Math.min(1, f.flash * 4);
+    ctx.drawImage(SPRITES_W[f.char.id], -w / 2, -h, w, h);
+    ctx.globalAlpha = 1;
+  }
+  if (f.invuln > 0 && st === "special") {
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(im, -w / 2 - 7, -h, w, h);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
+  drawFighterFx(f);
+}
+function drawFighterFx(f) {
+  const s = f.scale;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.scale(f.facing, 1);
+  if (f.state === "special" && f.atk) {
+    const a = f.atk;
+    if (a.type === "dash") {
+      ctx.strokeStyle = f.char.sp.iframes ? "rgba(180,160,255,.55)" : "rgba(255,255,255,.4)";
+      ctx.lineWidth = 3;
+      for (let i = 1; i <= 5; i++) {
+        ctx.globalAlpha = 0.5 - i * 0.09;
+        ctx.beginPath(); ctx.moveTo(-i * 14 * s, -74 * s); ctx.lineTo(-i * 14 * s - 16, -14 * s); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    } else if (a.type === "rope") {
+      const prog = clamp((a.t - a.def.startup) / a.def.active, 0, 1);
+      ctx.strokeStyle = "#b98a4a"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(26 * s, -60 * s);
+      ctx.quadraticCurveTo(90 * s, -72 * s + Math.sin(prog * 6) * 10, (36 + 210 * prog) * s, -56 * s);
+      ctx.stroke();
+      ctx.fillStyle = "#8a6a3a";
+      ctx.beginPath(); ctx.arc((36 + 210 * prog) * s, -56 * s, 5, 0, 7); ctx.fill();
+    }
+  }
+  if (f.countering) {
+    ctx.strokeStyle = "rgba(255,224,138,.7)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, -54 * s, 42 * s + Math.sin(f.st * 20) * 3, 0, 7); ctx.stroke();
+  }
+  ctx.restore();
+}
 function limb(x1, y1, x2, y2, w, color) {
   ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
@@ -1033,6 +1129,7 @@ function moodOf(f) {
   return "idle";
 }
 function drawFighter(f) {
+  if (SPRITES[f.char.id]) { drawSpriteFighter(f); return; }
   const c = f.char.col, art = f.char.art, s = f.scale;
   const mood = moodOf(f);
   ctx.save();
