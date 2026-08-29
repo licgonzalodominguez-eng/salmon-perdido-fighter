@@ -143,6 +143,18 @@ const sfx = {
   round: () => { tone(523, 0.1, "square", 0.05); setTimeout(() => tone(784, 0.16, "square", 0.05), 110); },
   whip:  () => { tone(240, 0.04, "sawtooth", 0.05, 1400); tone(90, 0.12, "square", 0.05, 40); },
   heal:  () => { tone(523, 0.12, "sine", 0.04, 784); setTimeout(() => tone(659, 0.18, "sine", 0.03, 988), 90); },
+  melee(kind) {
+    switch (kind) {
+      case "katana": tone(2000, 0.05, "square", 0.03, 3000); tone(1300, 0.14, "triangle", 0.02, 700); break;
+      case "knife":  tone(720, 0.05, "sawtooth", 0.035, 1600); break;
+      case "hammer": tone(80, 0.16, "sawtooth", 0.08, 40); tone(160, 0.08, "square", 0.04, 60); break;
+      case "whip":   this.whip(); break;
+      case "bo":
+      case "staff":  tone(300, 0.09, "sine", 0.03, 560); break;
+      case "nunchaku": tone(600, 0.035, "square", 0.025, 1500); setTimeout(() => tone(520, 0.04, "square", 0.02, 1300), 45); break;
+      default:       this.swing();
+    }
+  },
   cast(shape) {
     switch (shape) {
       case "bolt":     tone(1300, 0.05, "square", 0.045, 380); tone(760, 0.09, "sawtooth", 0.03, 180); break;
@@ -418,7 +430,7 @@ const ROSTER = [
     col:{fur:"#2c2c31", fur2:"#41414a", accent:"#7a4a24", trim:"#c0392b", eye:"#f2c14e", nose:"#c98a86"},
     stats:{hp:100, spd:1.00, pow:1.06, wt:1.05, jump:1.00},
     art:{ears:"cat", hat:"fedora", cape:"none", body:"normal", scarf:true, rope:true},
-    sp:{name:"Latigazo", kind:"rope", cost:40} },
+    sp:{name:"Bumerang", kind:"projectile", shape:"boomerang", pcolor:"#b98a4a", speed:470, r:15, dmg:11, boomerang:true, cost:38} },
   { id:"kai", name:"Kai", tag:"Guerrero Ninja",
     col:{fur:"#e8843c", fur2:"#f0b070", accent:"#211f24", trim:"#e8a83c", eye:"#7ad06a", nose:"#d98a6a"},
     stats:{hp:100, spd:1.20, pow:0.94, wt:0.90, jump:1.06},
@@ -537,7 +549,7 @@ class Fighter {
     this.atk = { type, def, t: 0, hasHit: false, hitCount: 0, nextHit: 0, crouch: !!opt.crouch, spawned: false, lowFlag: !!opt.low };
     this.state = (type === "riposte") ? "attack" : "attack";
     this.st = 0;
-    if (type === "light") sfx.swing();
+    if (type === "light") sfx.melee(MELEE_WEAPON[this.char.id]);
     else if (type === "heavy" || type === "air") sfx.swing();
   }
 
@@ -1434,6 +1446,14 @@ function drawProjectile(p) {
       ctx.beginPath(); ctx.moveTo(0, -p.r); ctx.lineTo(4, -3); ctx.lineTo(-4, -3); ctx.closePath(); ctx.fill();
     }
     ctx.fillStyle = "#2a2a30"; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
+  } else if (p.shape === "boomerang") {         // bumerang de Bruce, va y vuelve
+    ctx.strokeStyle = "rgba(255,240,210,.20)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 26, 0, 7); ctx.stroke();
+    ctx.rotate(p.spin * 4.2);
+    ctx.strokeStyle = p.color; ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(-16, 6); ctx.lineTo(2, -14); ctx.lineTo(16, 8); ctx.stroke();
+    ctx.strokeStyle = "#6b4a26"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-16, 6); ctx.lineTo(2, -14); ctx.lineTo(16, 8); ctx.stroke();
   } else if (p.shape === "katana") {            // katana de Kai, revoleada
     ctx.strokeStyle = "rgba(220,230,245,.22)"; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(0, 0, 30, 0, 7); ctx.stroke();     // estela circular
@@ -1550,6 +1570,75 @@ function tintCanvas(im, color) {
   return c;
 }
 const SPRITE_H = 118; // altura del sprite en unidades locales (antes de f.scale)
+
+// arma que cada quien extiende al hacer piña (golpe)
+const MELEE_WEAPON = {
+  nocturna: "staff", lupita: "staff", atlas: "hammer", kai: "katana",
+  ratin: "nunchaku", viper: "knife", yubari: "bo", bruce: "whip",
+};
+
+// dibuja el arma saliendo de la mano (hx,hy) según phase 0..1; x+ = hacia el rival
+function drawWeapon(kind, hx, hy, phase, col) {
+  const ex = hx + phase * 62, ey = hy + phase * 2;   // punta al extender
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (kind === "staff" || kind === "bo") {
+    const pole = kind === "bo" ? "#8a5a34" : "#3a2f4a";
+    ctx.strokeStyle = pole; ctx.lineWidth = kind === "bo" ? 6 : 5;
+    ctx.beginPath(); ctx.moveTo(hx - 16, hy + 10); ctx.lineTo(ex + 8, ey - phase * 4); ctx.stroke();
+    if (kind === "staff") {
+      const oc = col.eye || "#b57bf0";
+      ctx.shadowColor = oc; ctx.shadowBlur = 12; ctx.fillStyle = oc;
+      ctx.beginPath(); ctx.arc(ex + 8, ey - phase * 4, 6, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  } else if (kind === "hammer") {
+    ctx.strokeStyle = "#6b4a2e"; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(hx - 8, hy + 8); ctx.lineTo(ex, ey - 8); ctx.stroke();
+    ctx.save(); ctx.translate(ex, ey - 8); ctx.rotate(-0.5 + phase * 0.9);
+    ctx.fillStyle = "#8a97a3"; roundRect(-10, -16, 26, 22, 4); ctx.fill();
+    ctx.strokeStyle = "#3fd6e0"; ctx.lineWidth = 2; ctx.strokeRect(-4, -11, 12, 12);
+    ctx.restore();
+  } else if (kind === "katana") {
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(-1.0 + phase * 2.0);
+    ctx.strokeStyle = "#e6ecf5"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(50, -2); ctx.stroke();
+    ctx.fillStyle = "#d8a53a"; ctx.fillRect(-8, -3, 4, 6);
+    ctx.restore();
+    if (phase > 0.4) {
+      ctx.strokeStyle = "rgba(255,255,255," + (phase - 0.35) + ")"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(hx, hy, 48, -1.0, -1.0 + phase * 2.0); ctx.stroke();
+    }
+  } else if (kind === "knife") {
+    const kx = hx + phase * 40;
+    ctx.save(); ctx.translate(kx, hy - phase * 3); ctx.rotate(-0.35);
+    ctx.strokeStyle = "#dfe6ef"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20, -4); ctx.stroke();
+    ctx.strokeStyle = "#c9a44c"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); ctx.stroke();
+    ctx.restore();
+  } else if (kind === "nunchaku") {
+    const swing = Math.sin(phase * 7);
+    const j1x = hx + 6, j1y = hy + 4;
+    const b2x = j1x + 10 + phase * 34, b2y = j1y + swing * 20;
+    ctx.strokeStyle = "#2a2118"; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(hx - 6, hy - 6); ctx.lineTo(j1x, j1y); ctx.stroke();      // barra 1
+    ctx.strokeStyle = "#7a7a80"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(j1x, j1y); ctx.lineTo(b2x, b2y); ctx.stroke();            // cadena
+    ctx.strokeStyle = "#2a2118"; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(b2x, b2y); ctx.lineTo(b2x + 14, b2y + swing * 6); ctx.stroke(); // barra 2
+    if (phase > 0.3) {
+      ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(j1x, j1y, 26, 0, 7); ctx.stroke();
+    }
+  } else if (kind === "whip") {
+    ctx.strokeStyle = "#b98a4a"; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(hx - 6, hy);
+    ctx.quadraticCurveTo(hx + 34, hy - 16 + Math.sin(phase * 8) * 8, hx + 20 + phase * 74, hy + 4 + Math.sin(phase * 12) * 6);
+    ctx.stroke();
+    if (phase > 0.7) { ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.beginPath(); ctx.arc(hx + 20 + phase * 74, hy + 4, 3, 0, 7); ctx.fill(); }
+  }
+}
 function drawSpriteFighter(f) {
   const im = SPRITES[f.char.id], s = f.scale;
   const k = SPRITE_H / im.height, w = im.width * k, h = im.height * k;
@@ -1646,8 +1735,15 @@ function drawSpriteFighter(f) {
       : Math.sin(clamp((a.t - a.def.startup) / a.def.active, 0, 1) * Math.PI); // sale y vuelve
     const low = !!a.crouch;
     const kick = a.type === "heavy" && !low;
+    const wpn = a.type === "light" ? MELEE_WEAPON[f.char.id] : null;
     ctx.lineCap = "round";
-    if (kick) {
+    if (wpn) {
+      const shx = 4, shy = -SPRITE_H * 0.56;
+      const hpx = shx + Math.max(0, phase) * 30, hpy = shy + phase * 3;
+      ctx.strokeStyle = col.fur; ctx.lineWidth = 8;                        // antebrazo
+      ctx.beginPath(); ctx.moveTo(shx, shy); ctx.lineTo(hpx, hpy); ctx.stroke();
+      drawWeapon(wpn, hpx, hpy, Math.max(0, phase), col);
+    } else if (kick) {
       const hx = 2, hy = -SPRITE_H * 0.34;
       const fx = hx + phase * 60, fy = -SPRITE_H * 0.30 + phase * 6;
       ctx.strokeStyle = col.fur; ctx.lineWidth = 11;
@@ -1665,7 +1761,7 @@ function drawSpriteFighter(f) {
       ctx.fillStyle = col.accent || "rgba(0,0,0,.25)";
       ctx.beginPath(); ctx.arc(px, py, 3, 0, 7); ctx.fill();
     }
-    if (phase > 0.5) {
+    if (phase > 0.5 && !wpn) {
       ctx.strokeStyle = "rgba(255,255,255," + (phase - 0.45) * 0.9 + ")";
       ctx.lineWidth = 3;
       const ex = (kick ? 6 : 8) + phase * (kick ? 58 : 46);
