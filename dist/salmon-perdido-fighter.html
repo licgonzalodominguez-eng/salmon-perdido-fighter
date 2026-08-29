@@ -229,7 +229,7 @@ const music = {
       this.note(2000, t, 0.07, "square", 0.05);
       this.note(1400, t, 0.16, "sawtooth", 0.02, 700);
     }
-    this.note(b % 2 ? 6400 : 5200, t, 0.02, b === 14 ? 0.05 : 0.014, "square");            // hats
+    this.note(b % 2 ? 6400 : 5200, t, 0.02, "square", b === 14 ? 0.05 : 0.014);            // hats
 
     // --- bajo / sub ---
     if (b % 8 === 0) this.note(semi(chord - 12), t, 0.42, "sine", 0.34, semi(chord - 12) * 0.99);
@@ -432,7 +432,7 @@ const ROSTER = [
   { id:"nocturna", name:"Nocturna", tag:"Reina de las Sombras",
     col:{fur:"#1d1b26", fur2:"#332f40", accent:"#6a3db0", trim:"#c9a44c", eye:"#b57bf0", nose:"#7a5a8a"},
     stats:{hp:100, spd:0.92, pow:1.00, wt:1.00, jump:1.00},
-    art:{ears:"cat", hat:"crownObsidian", cape:"gownPurple", body:"gown", staff:"orbPurple", streak:true},
+    art:{ears:"cat", hat:"crownObsidian", cape:"gownPurple", body:"gown", staff:"orbPurple", streak:true, flip:true},
     sp:{name:"Orbe de Sombra", kind:"projectile", shape:"orb", pcolor:"#b57bf0", speed:360, r:18, dmg:12, cost:42} },
   { id:"viper", name:"Viper", tag:"Serpiente Sigilosa",
     col:{fur:"#4a5f3a", fur2:"#c9a44c", accent:"#1f392b", trim:"#c9a44c", eye:"#f2d24e", nose:"#2f2f2f"},
