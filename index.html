@@ -34,9 +34,9 @@
     </div>
   </div>
   <div class="hint">
-    <b>P1</b>: A/D mover · W saltar · S agacharse · F golpe · G patada · V bloquear · B especial &nbsp;|&nbsp;
-    <b>P2</b>: ←/→ · ↑ · ↓ · 1 golpe · 2 patada · 3 bloquear · 4 especial<br>
-    Enter confirmar · M silenciar · P pausa · R reiniciar combate
+    Controles por defecto — <b>P1</b>: A/D · W · S · F golpe · G patada · V bloquear · B especial &nbsp;|&nbsp;
+    <b>P2</b>: ←/→ · ↑ · ↓ · 1 · 2 · 3 · 4<br>
+    Enter confirmar · M silenciar · P pausa · R reiniciar &nbsp;·&nbsp; <b>se pueden cambiar en el menú → CONTROLES</b>
   </div>
 
 <script>
@@ -83,19 +83,69 @@ const sfx = {
 
 /* ============================================================ INPUT */
 const keys = {}, pressed = {};
-const GAMEKEYS = new Set(["KeyA","KeyD","KeyW","KeyS","KeyF","KeyG","KeyV","KeyB",
-  "ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Digit1","Digit2","Digit3","Digit4",
-  "Enter","Space","KeyM","KeyP","KeyR"]);
+let captureCb = null;              // si está puesto, la próxima tecla se captura (remapeo)
+
+const DEFAULT_MAP1 = { left:"KeyA", right:"KeyD", up:"KeyW", down:"KeyS", punch:"KeyF", kick:"KeyG", block:"KeyV", special:"KeyB" };
+const DEFAULT_MAP2 = { left:"ArrowLeft", right:"ArrowRight", up:"ArrowUp", down:"ArrowDown", punch:"Digit1", kick:"Digit2", block:"Digit3", special:"Digit4" };
+const MAP1 = { ...DEFAULT_MAP1 }, MAP2 = { ...DEFAULT_MAP2 };
+const ACTIONS = [
+  ["left","Izquierda"], ["right","Derecha"], ["up","Saltar"], ["down","Agacharse"],
+  ["punch","Golpe"], ["kick","Patada"], ["block","Bloquear"], ["special","Especial"],
+];
+const CKEY = "sp-fighter-controls";
+function loadControls() {
+  try {
+    const s = JSON.parse(localStorage.getItem(CKEY) || "{}");
+    for (const k in DEFAULT_MAP1) MAP1[k] = (s.p1 && s.p1[k]) || DEFAULT_MAP1[k];
+    for (const k in DEFAULT_MAP2) MAP2[k] = (s.p2 && s.p2[k]) || DEFAULT_MAP2[k];
+  } catch (e) { Object.assign(MAP1, DEFAULT_MAP1); Object.assign(MAP2, DEFAULT_MAP2); }
+}
+function saveControls() {
+  try { localStorage.setItem(CKEY, JSON.stringify({ p1: { ...MAP1 }, p2: { ...MAP2 } })); } catch (e) {}
+}
+function resetControls() { Object.assign(MAP1, DEFAULT_MAP1); Object.assign(MAP2, DEFAULT_MAP2); saveControls(); rebuildGamekeys(); }
+function keyConflict(code) {
+  let n = 0;
+  for (const v of Object.values(MAP1)) if (v === code) n++;
+  for (const v of Object.values(MAP2)) if (v === code) n++;
+  return n > 1;
+}
+function keyLabel(code) {
+  if (!code) return "—";
+  const m = {
+    ArrowLeft:"←", ArrowRight:"→", ArrowUp:"↑", ArrowDown:"↓",
+    Space:"ESPACIO", Enter:"ENTER", Backspace:"⌫", Tab:"TAB", Escape:"ESC",
+    ShiftLeft:"⇧ Izq", ShiftRight:"⇧ Der", ControlLeft:"Ctrl Izq", ControlRight:"Ctrl Der",
+    AltLeft:"Alt Izq", AltRight:"Alt Der", Semicolon:"; ", Comma:", ", Period:". ", Slash:"/",
+  };
+  if (m[code]) return m[code];
+  if (code.startsWith("Key")) return code.slice(3);
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return "Num " + code.slice(6);
+  return code;
+}
+
+let GAMEKEYS = new Set();
+function rebuildGamekeys() {
+  GAMEKEYS = new Set(["Enter","Space","KeyM","KeyP","KeyR","Escape",
+    "KeyW","KeyS","ArrowUp","ArrowDown",
+    ...Object.values(MAP1), ...Object.values(MAP2)]);
+}
+loadControls();
+rebuildGamekeys();
+
 addEventListener("keydown", (e) => {
+  if (captureCb) {
+    e.preventDefault();
+    if (!e.repeat) { const cb = captureCb; captureCb = null; cb(e.code); }
+    return;
+  }
   if (GAMEKEYS.has(e.code)) e.preventDefault();
   if (!e.repeat) pressed[e.code] = true;
   keys[e.code] = true;
   if (e.code === "KeyM" && !e.repeat) { muted = !muted; }
 }, { passive: false });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
-
-const MAP1 = { left:"KeyA", right:"KeyD", up:"KeyW", down:"KeyS", punch:"KeyF", kick:"KeyG", block:"KeyV", special:"KeyB" };
-const MAP2 = { left:"ArrowLeft", right:"ArrowRight", up:"ArrowUp", down:"ArrowDown", punch:"Digit1", kick:"Digit2", block:"Digit3", special:"Digit4" };
 function readInput(map) {
   return {
     left: !!keys[map.left], right: !!keys[map.right], up: !!keys[map.up], down: !!keys[map.down],
@@ -103,7 +153,7 @@ function readInput(map) {
     punch: !!pressed[map.punch], kick: !!pressed[map.kick], special: !!pressed[map.special],
   };
 }
-const anyConfirm = () => pressed["Enter"] || pressed["Space"] || pressed["KeyF"] || pressed["Digit1"];
+const anyConfirm = () => pressed["Enter"] || pressed["Space"] || pressed[MAP1.punch] || pressed[MAP2.punch] || pressed["KeyF"] || pressed["Digit1"];
 
 /* ============================================================ ROSTER */
 const ROSTER = [
@@ -460,9 +510,11 @@ function updateParticles(dt) {
 
 /* ============================================================ GAME STATE */
 const game = {
-  scene: "title",           // title|select|versus|fight|roundend|matchend
+  scene: "title",           // title|controls|select|versus|fight|roundend|matchend
   mode: 2,                  // 1 or 2 players
   menuSel: 0,
+  ctrlCursor: 0,            // fila seleccionada en la pantalla de controles
+  ctrlCapturing: false,     // esperando que el jugador pulse una tecla
   // select
   selPick: 0,               // in 1P: 0 -> choose P1, 1 -> choose opponent
   cur1: 0, cur2: 4,
@@ -663,6 +715,7 @@ function aiInput(f, opp) {
 function update(dt) {
   game.sceneT += dt;
   if (game.scene === "title") return updateTitle();
+  if (game.scene === "controls") return updateControls();
   if (game.scene === "select") return updateSelect();
   if (game.scene === "versus") {
     if (game.sceneT > 1.6 || anyConfirm()) beginRound();
@@ -798,15 +851,49 @@ function resolveKO(winner) {
 }
 
 /* ---- title ---- */
+const TITLE_OPTS = 3;   // 1 jugador · 2 jugadores · controles
 function updateTitle() {
-  if (pressed["KeyW"] || pressed["ArrowUp"]) { game.menuSel = (game.menuSel + 1) % 2; sfx.ui(); }
-  if (pressed["KeyS"] || pressed["ArrowDown"]) { game.menuSel = (game.menuSel + 1) % 2; sfx.ui(); }
+  if (pressed["KeyW"] || pressed["ArrowUp"]) { game.menuSel = (game.menuSel + TITLE_OPTS - 1) % TITLE_OPTS; sfx.ui(); }
+  if (pressed["KeyS"] || pressed["ArrowDown"]) { game.menuSel = (game.menuSel + 1) % TITLE_OPTS; sfx.ui(); }
   if (anyConfirm()) {
-    game.mode = game.menuSel === 0 ? 1 : 2;
     sfx.round();
+    if (game.menuSel === 2) { game.scene = "controls"; game.ctrlCursor = 0; game.ctrlCapturing = false; return; }
+    game.mode = game.menuSel === 0 ? 1 : 2;
     resetSelect();
     game.scene = "select";
   }
+}
+
+/* ---- controles ---- */
+function ctrlRows() {
+  const rows = [];
+  for (const [a, label] of ACTIONS) rows.push({ p: 1, a, label });
+  for (const [a, label] of ACTIONS) rows.push({ p: 2, a, label });
+  rows.push({ kind: "reset" }, { kind: "back" });
+  return rows;
+}
+function updateControls() {
+  const rows = ctrlRows();
+  if (game.ctrlCapturing) return;   // la tecla la resuelve captureCb
+  if (pressed["KeyW"] || pressed["ArrowUp"]) { game.ctrlCursor = (game.ctrlCursor + rows.length - 1) % rows.length; sfx.ui(); }
+  if (pressed["KeyS"] || pressed["ArrowDown"]) { game.ctrlCursor = (game.ctrlCursor + 1) % rows.length; sfx.ui(); }
+  if (pressed["Escape"] || pressed["Backspace"]) { game.scene = "title"; return; }
+  const confirm = pressed["Enter"] || pressed["Space"] || pressed[MAP1.punch] || pressed[MAP2.punch] || pressed["KeyF"] || pressed["Digit1"];
+  if (!confirm) return;
+  const row = rows[game.ctrlCursor];
+  if (row.kind === "back") { sfx.ui(); game.scene = "title"; return; }
+  if (row.kind === "reset") { resetControls(); sfx.round(); return; }
+  // capturar tecla para esta acción
+  game.ctrlCapturing = true;
+  sfx.ui();
+  captureCb = (code) => {
+    game.ctrlCapturing = false;
+    if (code === "Escape") return;
+    (row.p === 1 ? MAP1 : MAP2)[row.a] = code;
+    saveControls();
+    rebuildGamekeys();
+    sfx.round();
+  };
 }
 function resetSelect() {
   game.selPick = 0;
@@ -868,6 +955,7 @@ function frame(ts) {
 function render() {
   ctx.clearRect(0, 0, W, H);
   if (game.scene === "title") return drawTitle();
+  if (game.scene === "controls") return drawControls();
   if (game.scene === "select") return drawSelect();
 
   // shake
@@ -1583,16 +1671,78 @@ function drawTitle() {
   ctx.fillStyle = "#8b95b8"; ctx.font = "16px monospace";
   ctx.fillText("— ARCADE / COMBATE —", W / 2, 232);
 
-  const opts = ["1 JUGADOR  (vs CPU)", "2 JUGADORES"];
+  const opts = ["1 JUGADOR  (vs CPU)", "2 JUGADORES", "CONTROLES"];
   ctx.font = "bold 22px monospace";
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < opts.length; i++) {
     const sel = game.menuSel === i;
     ctx.fillStyle = sel ? "#4aa3ff" : "#eef2ff";
-    ctx.fillText((sel ? "▶  " : "    ") + opts[i], W / 2, 320 + i * 40);
+    ctx.fillText((sel ? "▶  " : "    ") + opts[i], W / 2, 312 + i * 38);
   }
   ctx.fillStyle = "#8b95b8"; ctx.font = "13px monospace";
-  ctx.fillText("W/S o ↑/↓ para elegir · ENTER para confirmar", W / 2, 430);
-  ctx.fillText("9 luchadores · al mejor de 3 · especial único por personaje", W / 2, 452);
+  ctx.fillText("W/S o ↑/↓ para elegir · ENTER para confirmar", W / 2, 448);
+  ctx.fillText("9 luchadores · al mejor de 3 · especial único por personaje", W / 2, 470);
+  ctx.textAlign = "left";
+}
+
+/* ---------- controles ---------- */
+function drawControls() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#161d33"); g.addColorStop(1, "#080b14");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#eef2ff"; ctx.font = "bold 24px monospace";
+  ctx.fillText("CONTROLES", W / 2, 46);
+  ctx.fillStyle = "#8b95b8"; ctx.font = "12px monospace";
+  ctx.fillText("↑/↓ mover · ENTER cambiar una tecla · ESC volver · se guarda solo", W / 2, 68);
+
+  const rows = ctrlRows();
+  const colX = [W * 0.10, W * 0.56];
+  const top = 100, rh = 34;
+  for (const pl of [1, 2]) {
+    const x = colX[pl - 1];
+    ctx.textAlign = "left";
+    ctx.fillStyle = pl === 1 ? "#4aa3ff" : "#ff5470";
+    ctx.font = "bold 15px monospace";
+    ctx.fillText("JUGADOR " + pl, x, top - 10);
+    for (let i = 0; i < ACTIONS.length; i++) {
+      const idx = (pl - 1) * ACTIONS.length + i;
+      const row = rows[idx];
+      const y = top + i * rh;
+      const selected = game.ctrlCursor === idx;
+      if (selected) {
+        ctx.fillStyle = "#ffffff14";
+        roundRect(x - 8, y - 18, W * 0.36, 26, 6); ctx.fill();
+      }
+      ctx.fillStyle = selected ? "#eef2ff" : "#b9c2e0";
+      ctx.font = "14px monospace";
+      ctx.fillText(row.label, x, y);
+      const code = (pl === 1 ? MAP1 : MAP2)[row.a];
+      const cap = selected && game.ctrlCapturing;
+      ctx.textAlign = "right";
+      ctx.fillStyle = cap ? "#ffd24a" : keyConflict(code) ? "#ff5470" : "#7ee0a8";
+      ctx.font = "bold 14px monospace";
+      ctx.fillText(cap ? "pulsá una tecla…" : "[ " + keyLabel(code) + " ]", x + W * 0.34, y);
+      ctx.textAlign = "left";
+    }
+  }
+
+  // botones
+  const btnY = top + ACTIONS.length * rh + 28;
+  const btns = [["reset", "Restaurar por defecto"], ["back", "Volver"]];
+  ctx.textAlign = "center";
+  ctx.font = "bold 16px monospace";
+  for (let i = 0; i < btns.length; i++) {
+    const idx = ACTIONS.length * 2 + i;
+    const sel = game.ctrlCursor === idx;
+    ctx.fillStyle = sel ? "#4aa3ff" : "#cdd5f0";
+    ctx.fillText((sel ? "▶  " : "") + btns[i][1], W / 2, btnY + i * 34);
+  }
+
+  if ([...Object.values(MAP1), ...Object.values(MAP2)].some(keyConflict)) {
+    ctx.fillStyle = "#ff5470"; ctx.font = "12px monospace";
+    ctx.fillText("una tecla en rojo está repetida", W / 2, H - 20);
+  }
   ctx.textAlign = "left";
 }
 
