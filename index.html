@@ -161,7 +161,7 @@ const ROSTER = [
     col:{fur:"#f1eee6", fur2:"#dcd6ea", accent:"#4a3d7a", trim:"#e8c24a", eyeL:"#4aa3ff", eyeR:"#f2b33a", nose:"#e59bb0"},
     stats:{hp:100, spd:1.00, pow:1.00, wt:1.00, jump:1.00},
     art:{ears:"cat", hat:"none", cape:"purpleTorn", body:"normal", fang:true},
-    sp:{name:"Capa Fantasma", kind:"dash", iframes:true, cost:35} },
+    sp:{name:"Bola de Energía", kind:"projectile", shape:"energy", pcolor:"#8f7fff", speed:470, r:16, dmg:11, cost:38} },
   { id:"lupita", name:"Lupita", tag:"Princesa Hechicera",
     col:{fur:"#fbf6ee", fur2:"#efe5d4", accent:"#c8237a", trim:"#e8c24a", eye:"#8a5bd0", nose:"#e89bb5"},
     stats:{hp:100, spd:0.86, pow:0.98, wt:0.95, jump:0.96},
@@ -196,7 +196,7 @@ const ROSTER = [
     col:{fur:"#e6e4dd", fur2:"#f3f1eb", accent:"#6a8a4a", trim:"#c9b06a", eye:"#e2a23c", nose:"#d9a58a"},
     stats:{hp:100, spd:0.80, pow:1.16, wt:1.10, jump:0.90},
     art:{ears:"cat", hat:"straw", cape:"none", body:"normal", beard:true, glasses:true, staff:"wood"},
-    sp:{name:"Contra del Sensei", kind:"counter", cost:35} },
+    sp:{name:"Ohm Vital", kind:"projectile", shape:"om", pcolor:"#e8c24a", speed:400, r:16, dmg:11, drain:0.4, cost:40} },
   { id:"ratin", name:"Ratín", tag:"Ratón Ninja",
     col:{fur:"#8a8a90", fur2:"#a9a9b1", accent:"#211f24", trim:"#e8a83c", eye:"#7a4a2a", nose:"#e59bb0"},
     stats:{hp:90, spd:1.36, pow:0.80, wt:0.74, jump:1.16},
@@ -483,6 +483,7 @@ function spawnProjectile(f) {
     r: s.r || 15, owner: f, life: 2.6, spin: 0,
     color: s.pcolor || "#ffd24a",
     shape: s.shape || (s.salmon ? "salmon" : s.crescent ? "orb" : "orb"),
+    drain: s.drain || 0,
     dmg: Math.round((s.dmg || 9) * f.char.stats.pow), stun: 0.5,
   });
   spawnSpark(x, y, s.pcolor || "#ffd24a", 8);
@@ -800,6 +801,15 @@ function update(dt) {
             spawnSpark(p.x, p.y, p.color, 14);
             game.shake = 8; game.hitstop = 0.05;
             p.owner.meter = Math.min(METER_MAX, p.owner.meter + 8);
+            if (p.drain) {                       // Ohm de Yubari: roba vida
+              const heal = Math.round(p.dmg * p.drain);
+              p.owner.hp = Math.min(p.owner.maxhp, p.owner.hp + heal);
+              for (let i = 0; i < 6; i++) particles.push({
+                x: p.owner.x + (Math.random() - .5) * 30, y: p.owner.y - 40 - Math.random() * 50,
+                vx: (Math.random() - .5) * 30, vy: -40 - Math.random() * 40,
+                life: .5, max: .5, kind: "spark", color: "#7ee0a8",
+              });
+            }
           }
           p.life = 0;
         }
@@ -1054,6 +1064,31 @@ function drawProjectile(p) {
       ctx.beginPath(); ctx.moveTo(0, -p.r); ctx.lineTo(4, -3); ctx.lineTo(-4, -3); ctx.closePath(); ctx.fill();
     }
     ctx.fillStyle = "#2a2a30"; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
+  } else if (p.shape === "energy") {            // bola de energía de Michiloco
+    const pr = p.r * (1 + 0.12 * Math.sin(p.spin * 5));
+    const g = ctx.createRadialGradient(0, 0, 1, 0, 0, pr * 1.5);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.35, "#d9d2ff");
+    g.addColorStop(0.7, p.color); g.addColorStop(1, "rgba(143,127,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, pr * 1.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const a = p.spin * 3 + i * 2.1;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * pr * 0.9, Math.sin(a) * pr * 0.5, 2.2, 0, 7); ctx.stroke();
+    }
+  } else if (p.shape === "om") {                // Ohm vital de Yubari (roba vida)
+    ctx.fillStyle = "rgba(232,194,74,.22)";
+    ctx.beginPath(); ctx.arc(0, 0, p.r * 1.35, 0, 7); ctx.fill();
+    ctx.strokeStyle = p.color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, p.r * 1.15 + Math.sin(p.spin * 4) * 1.5, 0, 7); ctx.stroke();
+    ctx.save();
+    ctx.scale(dir, 1);                          // el glifo no se espeja
+    ctx.fillStyle = p.color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = "bold " + Math.round(p.r * 2.1) + "px serif";
+    ctx.shadowColor = p.color; ctx.shadowBlur = 10;
+    ctx.fillText("ॐ", 0, 1);               // ॐ
+    ctx.restore();
   } else if (p.shape === "salmon") {            // (legado)
     ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.ellipse(0, 0, 16, 9, 0, 0, 7); ctx.fill();
