@@ -1099,7 +1099,7 @@ function update(dt) {
   if (game.scene === "select") return updateSelect();
   if (game.scene === "stageselect") return updateStageSelect();
   if (game.scene === "versus") {
-    if (game.sceneT > 1.6 || anyConfirm()) beginRound();
+    if (game.sceneT > 2.8 || (game.sceneT > 0.6 && anyConfirm())) beginRound();
     return;
   }
   if (game.scene === "roundend") {
@@ -1604,6 +1604,19 @@ const SPRITE_H = 118; // altura del sprite en unidades locales (antes de f.scale
 const SPECIES = {
   michiloco: "cat", lupita: "cat", bruce: "cat", kai: "cat", yubari: "cat",
   nocturna: "bigcat", atlas: "axolotl", viper: "snake", ratin: "mouse",
+};
+
+// frase de cada quien antes de pelear
+const TAUNT = {
+  michiloco: "Antes robaba corazones. Hoy te robo la pelea.",
+  lupita:    "La corona no se inclina ante nadie.",
+  bruce:     "He escapado de cosas peores que vos.",
+  kai:       "El maestro me enseñó a terminar rápido.",
+  atlas:     "Perdón por adelantado... me muevo raro.",
+  nocturna:  "Sonreí. Que sea lo último que hagas.",
+  viper:     "No vas a ver de dónde viene el golpe.",
+  yubari:    "La paciencia también sabe golpear.",
+  ratin:     "Chiquito, sí. Fácil, no.",
 };
 
 // arma que cada quien extiende al hacer piña (golpe) + cómo se mueve
@@ -2499,7 +2512,20 @@ function drawVersus() {
   ctx.fillStyle = "#8b95b8"; ctx.font = "12px monospace";
   ctx.fillText(c1.tag, W * 0.28, 92);
   ctx.fillText(c2.tag, W * 0.72, 92);
+  // frase característica (aparece escalonada)
+  ctx.font = "italic 13px monospace";
+  ctx.fillStyle = "#e7ecff";
+  if (game.sceneT > 0.35) wrapText("« " + TAUNT[c1.id] + " »", W * 0.28, H - 78, 260, 16);
+  if (game.sceneT > 0.8) wrapText("« " + TAUNT[c2.id] + " »", W * 0.72, H - 78, 260, 16);
   ctx.textAlign = "left";
+}
+function wrapText(txt, cx, y, maxW, lh) {
+  const words = txt.split(" "); let line = "", yy = y;
+  for (const w of words) {
+    if (ctx.measureText(line + w).width > maxW && line) { ctx.fillText(line.trim(), cx, yy); line = ""; yy += lh; }
+    line += w + " ";
+  }
+  ctx.fillText(line.trim(), cx, yy);
 }
 function drawBigBust(char, x, y, facing, t) {
   ctx.save();
