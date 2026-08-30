@@ -163,6 +163,17 @@ const sfx = {
         tone(400, 0.3, "sawtooth", 0.05, 200);
     }
   },
+  voice(id, text) {                               // balbuceo estilo juego viejo, un blip por sílaba
+    if (muted) return;
+    const v = VOICE[id] || VOICE.michiloco;
+    const blips = Math.min(22, Math.max(4, Math.round((text || "xxxxxx").replace(/\s/g, "").length / 2.6)));
+    for (let i = 0; i < blips; i++) {
+      const up = i / blips;
+      const f = v.hz * (1 - v.wob + Math.random() * v.wob * 2) * (1 + Math.sin(up * 7) * 0.05);
+      const dur = 0.05 + Math.random() * 0.03;
+      setTimeout(() => tone(f, dur, v.type, 0.035, f * (0.9 + Math.random() * 0.25)), i * v.rate);
+    }
+  },
   ui:    () => tone(440, 0.05, "square", 0.03),
   round: () => { tone(523, 0.1, "square", 0.05); setTimeout(() => tone(784, 0.16, "square", 0.05), 110); },
   whip:  () => { tone(240, 0.04, "sawtooth", 0.05, 1400); tone(90, 0.12, "square", 0.05, 40); },
@@ -859,6 +870,7 @@ function startMatch() {
   game.scene = "versus";
   game.sceneT = 0;
   game.round = 1; game.wins = [0, 0];
+  game.vsSpoke1 = game.vsSpoke2 = false;
   game.stage = game.stagePick || STAGES[(Math.random() * STAGES.length) | 0];
 }
 function updateStageSelect() {
@@ -1098,6 +1110,9 @@ function update(dt) {
   if (game.scene === "select") return updateSelect();
   if (game.scene === "stageselect") return updateStageSelect();
   if (game.scene === "versus") {
+    const c1 = byId(game.pick1), c2 = byId(game.pick2);
+    if (game.sceneT > 0.35 && !game.vsSpoke1) { game.vsSpoke1 = true; sfx.voice(c1.id, TAUNT[c1.id]); }
+    if (game.sceneT > 1.35 && !game.vsSpoke2) { game.vsSpoke2 = true; sfx.voice(c2.id, TAUNT[c2.id]); }
     if (game.sceneT > 2.8 || (game.sceneT > 0.6 && anyConfirm())) beginRound();
     return;
   }
@@ -1603,6 +1618,19 @@ const SPRITE_H = 118; // altura del sprite en unidades locales (antes de f.scale
 const SPECIES = {
   michiloco: "cat", lupita: "cat", bruce: "cat", kai: "cat", yubari: "cat",
   nocturna: "bigcat", atlas: "axolotl", viper: "snake", ratin: "mouse",
+};
+
+// "voz" balbuceada de cada quien (base Hz, forma de onda, ritmo ms, vibrato)
+const VOICE = {
+  michiloco: { hz: 440, type: "triangle", rate: 95,  wob: 0.14 },
+  lupita:    { hz: 520, type: "sine",     rate: 120, wob: 0.08 },
+  bruce:     { hz: 340, type: "square",   rate: 100, wob: 0.10 },
+  kai:       { hz: 380, type: "sawtooth", rate: 80,  wob: 0.10 },
+  atlas:     { hz: 300, type: "sine",     rate: 110, wob: 0.28 },
+  nocturna:  { hz: 230, type: "sawtooth", rate: 125, wob: 0.10 },
+  viper:     { hz: 270, type: "sawtooth", rate: 90,  wob: 0.20 },
+  yubari:    { hz: 250, type: "sine",     rate: 150, wob: 0.06 },
+  ratin:     { hz: 720, type: "square",   rate: 62,  wob: 0.16 },
 };
 
 // frase de cada quien antes de pelear
@@ -2515,7 +2543,7 @@ function drawVersus() {
   ctx.font = "italic 13px monospace";
   ctx.fillStyle = "#e7ecff";
   if (game.sceneT > 0.35) wrapText("« " + TAUNT[c1.id] + " »", W * 0.28, H - 78, 260, 16);
-  if (game.sceneT > 0.8) wrapText("« " + TAUNT[c2.id] + " »", W * 0.72, H - 78, 260, 16);
+  if (game.sceneT > 1.35) wrapText("« " + TAUNT[c2.id] + " »", W * 0.72, H - 78, 260, 16);
   ctx.textAlign = "left";
 }
 function wrapText(txt, cx, y, maxW, lh) {
