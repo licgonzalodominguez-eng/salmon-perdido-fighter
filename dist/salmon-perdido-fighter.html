@@ -1606,72 +1606,77 @@ const SPECIES = {
   nocturna: "bigcat", atlas: "axolotl", viper: "snake", ratin: "mouse",
 };
 
-// arma que cada quien extiende al hacer piña (golpe)
+// arma que cada quien extiende al hacer piña (golpe) + cómo se mueve
 const MELEE_WEAPON = {
   nocturna: "staff", lupita: "staff", atlas: "hammer", kai: "katana",
   ratin: "nunchaku", viper: "knife", yubari: "bo", bruce: "whip",
 };
+const WEAPON_STYLE = {
+  staff: "thrust", bo: "thrust", knife: "thrust",
+  katana: "slash", hammer: "swing", nunchaku: "spin", whip: "crack",
+};
 
-// dibuja el arma saliendo de la mano (hx,hy) según phase 0..1; x+ = hacia el rival
-function drawWeapon(kind, hx, hy, phase, col) {
-  const ex = hx + phase * 62, ey = hy + phase * 2;   // punta al extender
+// codo: punto medio entre a y b, desplazado perpendicular por `bend`
+function jointMid(a, b, bend) {
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+  return { x: mx + (-dy / len) * bend, y: my + (dx / len) * bend };
+}
+// brazo de 2 segmentos con manita al final
+function limb2(a, m, b, color, wdt) {
+  ctx.strokeStyle = color; ctx.lineWidth = wdt; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(m.x, m.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(b.x, b.y, wdt * 0.6, 0, 7); ctx.fill();
+}
+// dibuja el arma en el origen local, apuntando a +x, con extensión e (0..1)
+function drawWeaponLocal(kind, e, col) {
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (kind === "staff" || kind === "bo") {
-    const pole = kind === "bo" ? "#8a5a34" : "#3a2f4a";
-    ctx.strokeStyle = pole; ctx.lineWidth = kind === "bo" ? 6 : 5;
-    ctx.beginPath(); ctx.moveTo(hx - 16, hy + 10); ctx.lineTo(ex + 8, ey - phase * 4); ctx.stroke();
+    ctx.strokeStyle = kind === "bo" ? "#8a5a34" : "#3a2f4a";
+    ctx.lineWidth = kind === "bo" ? 6 : 5;
+    const tip = 42 + e * 8;
+    ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(tip, 0); ctx.stroke();
     if (kind === "staff") {
       const oc = col.eye || "#b57bf0";
       ctx.shadowColor = oc; ctx.shadowBlur = 12; ctx.fillStyle = oc;
-      ctx.beginPath(); ctx.arc(ex + 8, ey - phase * 4, 6, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(tip, 0, 6, 0, 7); ctx.fill();
       ctx.shadowBlur = 0;
     }
+  } else if (kind === "katana") {
+    ctx.strokeStyle = "#e6ecf5"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(48, -2); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, -1); ctx.lineTo(46, -3); ctx.stroke();
+    ctx.fillStyle = "#d8a53a"; ctx.fillRect(-9, -3.5, 4, 7);
+    ctx.strokeStyle = "#2a1c10"; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-20, 0); ctx.stroke();
   } else if (kind === "hammer") {
     ctx.strokeStyle = "#6b4a2e"; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(hx - 8, hy + 8); ctx.lineTo(ex, ey - 8); ctx.stroke();
-    ctx.save(); ctx.translate(ex, ey - 8); ctx.rotate(-0.5 + phase * 0.9);
-    ctx.fillStyle = "#8a97a3"; roundRect(-10, -16, 26, 22, 4); ctx.fill();
-    ctx.strokeStyle = "#3fd6e0"; ctx.lineWidth = 2; ctx.strokeRect(-4, -11, 12, 12);
-    ctx.restore();
-  } else if (kind === "katana") {
-    ctx.save(); ctx.translate(hx, hy); ctx.rotate(-1.0 + phase * 2.0);
-    ctx.strokeStyle = "#e6ecf5"; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(50, -2); ctx.stroke();
-    ctx.fillStyle = "#d8a53a"; ctx.fillRect(-8, -3, 4, 6);
-    ctx.restore();
-    if (phase > 0.4) {
-      ctx.strokeStyle = "rgba(255,255,255," + (phase - 0.35) + ")"; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.arc(hx, hy, 48, -1.0, -1.0 + phase * 2.0); ctx.stroke();
-    }
+    ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(26, 0); ctx.stroke();
+    ctx.fillStyle = "#8a97a3"; roundRect(22, -13, 22, 26, 4); ctx.fill();
+    ctx.strokeStyle = "#3fd6e0"; ctx.lineWidth = 2; ctx.strokeRect(28, -8, 10, 12);
   } else if (kind === "knife") {
-    const kx = hx + phase * 40;
-    ctx.save(); ctx.translate(kx, hy - phase * 3); ctx.rotate(-0.35);
     ctx.strokeStyle = "#dfe6ef"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20, -4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(20, -3); ctx.stroke();
     ctx.strokeStyle = "#c9a44c"; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); ctx.stroke();
-    ctx.restore();
+    ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(-2, 0); ctx.stroke();
   } else if (kind === "nunchaku") {
-    const swing = Math.sin(phase * 7);
-    const j1x = hx + 6, j1y = hy + 4;
-    const b2x = j1x + 10 + phase * 34, b2y = j1y + swing * 20;
     ctx.strokeStyle = "#2a2118"; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(hx - 6, hy - 6); ctx.lineTo(j1x, j1y); ctx.stroke();      // barra 1
+    ctx.beginPath(); ctx.moveTo(-8, -4); ctx.lineTo(6, 4); ctx.stroke();         // barra en mano
+    const a = e * 12;                                                            // gira
+    const cx = 6 + Math.cos(a) * 22, cy = 4 + Math.sin(a) * 22;
     ctx.strokeStyle = "#7a7a80"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(j1x, j1y); ctx.lineTo(b2x, b2y); ctx.stroke();            // cadena
+    ctx.beginPath(); ctx.moveTo(6, 4); ctx.lineTo(cx, cy); ctx.stroke();         // cadena
     ctx.strokeStyle = "#2a2118"; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(b2x, b2y); ctx.lineTo(b2x + 14, b2y + swing * 6); ctx.stroke(); // barra 2
-    if (phase > 0.3) {
-      ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(j1x, j1y, 26, 0, 7); ctx.stroke();
-    }
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * 14, cy + Math.sin(a) * 14); ctx.stroke();
   } else if (kind === "whip") {
     ctx.strokeStyle = "#b98a4a"; ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(hx - 6, hy);
-    ctx.quadraticCurveTo(hx + 34, hy - 16 + Math.sin(phase * 8) * 8, hx + 20 + phase * 74, hy + 4 + Math.sin(phase * 12) * 6);
+    const curl = (1 - e) * 30;
+    ctx.beginPath(); ctx.moveTo(-6, 0);
+    ctx.quadraticCurveTo(30, -curl, 24 + e * 78, 4 + Math.sin(e * 12) * 5);
     ctx.stroke();
-    if (phase > 0.7) { ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.beginPath(); ctx.arc(hx + 20 + phase * 74, hy + 4, 3, 0, 7); ctx.fill(); }
+    if (e > 0.7) { ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.arc(24 + e * 78, 4, 3, 0, 7); ctx.fill(); }
   }
 }
 function drawSpriteFighter(f) {
@@ -1773,11 +1778,45 @@ function drawSpriteFighter(f) {
     const wpn = a.type === "light" ? MELEE_WEAPON[f.char.id] : null;
     ctx.lineCap = "round";
     if (wpn) {
-      const shx = 4, shy = -SPRITE_H * 0.56;
-      const hpx = shx + Math.max(0, phase) * 30, hpy = shy + phase * 3;
-      ctx.strokeStyle = col.fur; ctx.lineWidth = 8;                        // antebrazo
-      ctx.beginPath(); ctx.moveTo(shx, shy); ctx.lineTo(hpx, hpy); ctx.stroke();
-      drawWeapon(wpn, hpx, hpy, Math.max(0, phase), col);
+      // p: -0.28 (amagado) .. 0 .. 1 (extendido); 'e' = extensión útil 0..1
+      const p = phase, e = Math.max(0, p);
+      const style = WEAPON_STYLE[wpn] || "thrust";
+      const sh = { x: 2, y: -SPRITE_H * 0.58 };            // hombro
+      const armLen = 30;
+      let wr, wristAng, bend;
+      if (style === "swing") {                             // martillo: de arriba-atrás a adelante-abajo
+        const ang = -2.5 + (p + 0.28) / 1.28 * 2.35;       // rad respecto al hombro
+        wr = { x: sh.x + Math.cos(ang) * armLen, y: sh.y + Math.sin(ang) * armLen };
+        wristAng = ang + 1.35; bend = -16;
+      } else if (style === "slash") {                      // katana: diagonal por encima del hombro
+        const u = (p + 0.28) / 1.28;
+        const ang = -2.2 + (u < 0.35 ? -0.3 * (0.35 - u) : (u - 0.35) / 0.65 * 2.6);
+        wr = { x: sh.x + Math.cos(ang) * armLen, y: sh.y + Math.sin(ang) * armLen };
+        wristAng = ang + 0.5; bend = -14;
+      } else if (style === "crack") {                      // látigo: la mano restalla adelante
+        wr = { x: sh.x + (p < 0 ? p * 8 : e * 26), y: sh.y + 4 - e * 4 };
+        wristAng = -e * 0.3; bend = 10;
+      } else if (style === "spin") {                       // nunchaku: mano casi fija, el arma gira
+        wr = { x: sh.x + 6 + e * 14, y: sh.y + 6 };
+        wristAng = 0; bend = 9;
+      } else {                                             // thrust: báculo / bo / cuchillo
+        const back = p < 0 ? p : 0, fwd = e;
+        const reach = wpn === "knife" ? 22 : 30;
+        wr = { x: sh.x + back * 14 + fwd * reach, y: sh.y + 8 - fwd * 3 };
+        wristAng = -fwd * 0.12; bend = 8;
+      }
+      const el = jointMid(sh, wr, bend);
+      // estela del arma en la parte rápida del golpe
+      if (e > 0.25 && (style === "slash" || style === "swing")) {
+        ctx.strokeStyle = "rgba(255,255,255," + Math.min(0.5, (e - 0.2) * 0.8) + ")";
+        ctx.lineWidth = style === "swing" ? 7 : 5;
+        ctx.beginPath(); ctx.arc(sh.x, sh.y, armLen + 20, wristAng - 1.1, wristAng + 0.2); ctx.stroke();
+      }
+      limb2(sh, el, wr, col.fur, 8);
+      ctx.save();
+      ctx.translate(wr.x, wr.y); ctx.rotate(wristAng);
+      drawWeaponLocal(wpn, e, col);
+      ctx.restore();
     } else if (kick) {
       const hx = 2, hy = -SPRITE_H * 0.34;
       const fx = hx + phase * 60, fy = -SPRITE_H * 0.30 + phase * 6;
